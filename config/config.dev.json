@@ -1,0 +1,17 @@
+{
+  "cloud_url": "http://localhost:3000",
+  "connector_id": "46",
+  "connector_secret": "c_o68z3BWRtRZO-YRA8BQYCIRw1unhciMjksggYCMo4",
+  "site_name": "Home Lab",
+  "poll_commands_seconds": 3,
+  "push_snapshots_seconds": 30,
+  "heartbeat_seconds": 10,
+  "state_dir": "./state",
+  "moonraker": [
+    {
+      "printer_id": 262,
+      "name": "Voron",
+      "base_url": "http://192.168.68.70:7125"
+    }
+  ]
+}
