@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
 # printer-connector installer (Linux + systemd)
 #
@@ -24,21 +24,21 @@ PAIRING_TOKEN=""
 CONNECTOR_ID=""
 CONNECTOR_SECRET=""
 SITE_NAME=""
-CONFIG_PATH="/etc/printer-connector/config.json"
-STATE_DIR="/var/lib/printer-connector"
-BIN_DST="/usr/local/bin/printer-connector"
-SERVICE_USER="printer-connector"
+CONFIG_PATH="/usr/data/printer-connector/config.json"
+STATE_DIR="/usr/data/printer-connector/state"
+BIN_DST="/usr/data/printer-connector/printer-connector"
+SERVICE_USER="root"
 SERVICE_NAME="printer-connector"
 LOG_LEVEL="info"
 SKIP_PAIR="false"
 NO_START="false"
-PRINTER_SPECS=()
+PRINTER_SPECS=""
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 need_root() {
-  if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  if [ "$(id -u)" -ne 0 ]; then
     die "Please run as root (use sudo)."
   fi
 }
@@ -76,88 +76,144 @@ Examples:
 USAGE
 }
 
+eval_var() {
+  eval "echo \"\${$1}\""
+}
+
+set_var() {
+  eval "$1=\"\$2\""
+}
+
 prompt() {
   # Usage: prompt "Message" VAR_NAME [default]
-  local msg="$1"
-  local var="$2"
-  local def="${3:-}"
-  local cur="${!var:-}"
-  if [[ -n "$cur" ]]; then return 0; fi
+  msg="$1"
+  var="$2"
+  def="${3:-}"
+  cur="$(eval_var "$var")"
+  
+  if [ -n "$cur" ]; then return 0; fi
 
-  local input=""
-  if [[ -n "$def" ]]; then
-    read -r -p "$msg [$def]: " input </dev/tty || true
+  input=""
+  if [ -n "$def" ]; then
+    printf "%s [%s]: " "$msg" "$def" >/dev/tty
+    read -r input </dev/tty || true
     input="${input:-$def}"
   else
-    read -r -p "$msg: " input </dev/tty || true
+    printf "%s: " "$msg" >/dev/tty
+    read -r input </dev/tty || true
   fi
 
-  if [[ -z "$input" ]]; then
+  if [ -z "$input" ]; then
     die "Missing required value for: $msg"
   fi
-  printf -v "$var" "%s" "$input"
+  set_var "$var" "$input"
 }
 
 prompt_secret() {
   # Usage: prompt_secret "Message" VAR_NAME
-  local msg="$1"
-  local var="$2"
-  local cur="${!var:-}"
-  if [[ -n "$cur" ]]; then return 0; fi
+  msg="$1"
+  var="$2"
+  cur="$(eval_var "$var")"
+  
+  if [ -n "$cur" ]; then return 0; fi
 
-  local input=""
-  read -r -s -p "$msg: " input </dev/tty || true
+  stty -echo 2>/dev/null || true
+  printf "%s: " "$msg" >/dev/tty
+  read -r input </dev/tty || true
+  stty echo 2>/dev/null || true
   echo >/dev/tty
-  if [[ -z "$input" ]]; then
+  
+  if [ -z "$input" ]; then
     die "Missing required secret for: $msg"
   fi
-  printf -v "$var" "%s" "$input"
+  set_var "$var" "$input"
 }
 
-prompt_yesno() {
-  # Usage: prompt_yesno "Question" VAR_NAME default(y/n)
-  local msg="$1"
-  local var="$2"
-  local def="${3:-y}"
-  local cur="${!var:-}"
-  if [[ -n "$cur" ]]; then return 0; fi
 
-  local input=""
-  read -r -p "$msg (y/n) [$def]: " input </dev/tty || true
-  input="${input:-$def}"
-  case "$input" in
-    y|Y) printf -v "$var" "true" ;;
-    n|N) printf -v "$var" "false" ;;
-    *) die "Please answer y or n." ;;
-  esac
-}
 
 add_printer_interactive() {
-  local pid="" pname="" purl=""
+  pid=""
+  pname=""
+  purl=""
   prompt "Printer ID (must match Rails printer id)" pid
   prompt "Printer display name" pname
   prompt "Moonraker base URL (e.g. http://127.0.0.1:7125)" purl
-  PRINTER_SPECS+=("${pid}|${pname}|${purl}")
+  
+  if [ -z "$PRINTER_SPECS" ]; then
+    PRINTER_SPECS="${pid}|${pname}|${purl}"
+  else
+    PRINTER_SPECS="${PRINTER_SPECS}
+${pid}|${pname}|${purl}"
+  fi
 }
 
 # Parse args
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
   case "$1" in
-    --bin) BIN_SRC="${2:-}"; shift 2 ;;
-    --cloud-url) CLOUD_URL="${2:-}"; shift 2 ;;
-    --pairing-token) PAIRING_TOKEN="${2:-}"; shift 2 ;;
-    --connector-id) CONNECTOR_ID="${2:-}"; shift 2 ;;
-    --connector-secret) CONNECTOR_SECRET="${2:-}"; shift 2 ;;
-    --site-name) SITE_NAME="${2:-}"; shift 2 ;;
-    --config) CONFIG_PATH="${2:-}"; shift 2 ;;
-    --state-dir) STATE_DIR="${2:-}"; shift 2 ;;
-    --bin-dst) BIN_DST="${2:-}"; shift 2 ;;
-    --log-level) LOG_LEVEL="${2:-}"; shift 2 ;;
-    --printer) PRINTER_SPECS+=("${2:-}"); shift 2 ;;
-    --skip-pair) SKIP_PAIR="true"; shift ;;
-    --no-start) NO_START="true"; shift ;;
-    -h|--help) usage; exit 0 ;;
-    *) die "Unknown argument: $1 (use --help)" ;;
+    --bin)
+      BIN_SRC="${2:-}"
+      shift 2
+      ;;
+    --cloud-url)
+      CLOUD_URL="${2:-}"
+      shift 2
+      ;;
+    --pairing-token)
+      PAIRING_TOKEN="${2:-}"
+      shift 2
+      ;;
+    --connector-id)
+      CONNECTOR_ID="${2:-}"
+      shift 2
+      ;;
+    --connector-secret)
+      CONNECTOR_SECRET="${2:-}"
+      shift 2
+      ;;
+    --site-name)
+      SITE_NAME="${2:-}"
+      shift 2
+      ;;
+    --config)
+      CONFIG_PATH="${2:-}"
+      shift 2
+      ;;
+    --state-dir)
+      STATE_DIR="${2:-}"
+      shift 2
+      ;;
+    --bin-dst)
+      BIN_DST="${2:-}"
+      shift 2
+      ;;
+    --log-level)
+      LOG_LEVEL="${2:-}"
+      shift 2
+      ;;
+    --printer)
+      if [ -z "$PRINTER_SPECS" ]; then
+        PRINTER_SPECS="${2:-}"
+      else
+        PRINTER_SPECS="${PRINTER_SPECS}
+${2:-}"
+      fi
+      shift 2
+      ;;
+    --skip-pair)
+      SKIP_PAIR="true"
+      shift
+      ;;
+    --no-start)
+      NO_START="true"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      die "Unknown argument: $1 (use --help)"
+      ;;
   esac
 done
 
@@ -169,12 +225,18 @@ fi
 
 # Interactive prompts for missing values
 prompt "Path to compiled printer-connector binary" BIN_SRC
-[[ -f "$BIN_SRC" ]] || die "Binary not found: $BIN_SRC"
+[ -f "$BIN_SRC" ] || die "Binary not found: $BIN_SRC"
 
 prompt "Cloud URL (Rails app base URL)" CLOUD_URL
-[[ "$CLOUD_URL" == http://* || "$CLOUD_URL" == https://* ]] || die "cloud_url must start with http:// or https://"
+case "$CLOUD_URL" in
+  http://*|https://*)
+    ;;
+  *)
+    die "cloud_url must start with http:// or https://"
+    ;;
+esac
 
-if [[ "$SKIP_PAIR" == "true" ]]; then
+if [ "$SKIP_PAIR" = "true" ]; then
   prompt "Existing connector ID (from Rails)" CONNECTOR_ID
   prompt_secret "Existing connector secret (will be stored on this device)" CONNECTOR_SECRET
 else
@@ -183,21 +245,33 @@ else
 fi
 
 HOSTNAME_VAL="$(hostname 2>/dev/null || echo "printer")"
-if [[ -z "$SITE_NAME" ]]; then
+if [ -z "$SITE_NAME" ]; then
   # Only prompt if interactive (tty)
-  read -r -p "Site name (optional) [$HOSTNAME_VAL]: " SITE_NAME </dev/tty || true
+  printf "Site name (optional) [%s]: " "$HOSTNAME_VAL" >/dev/tty
+  read -r SITE_NAME </dev/tty || true
   SITE_NAME="${SITE_NAME:-$HOSTNAME_VAL}"
 fi
 
-if [[ "${#PRINTER_SPECS[@]}" -eq 0 ]]; then
+if [ -z "$PRINTER_SPECS" ]; then
   local_count=""
   prompt "How many printers will this connector manage?" local_count "1"
-  if ! [[ "$local_count" =~ ^[0-9]+$ ]] || [[ "$local_count" -lt 1 ]]; then
+  
+  # Validate number
+  case "$local_count" in
+    ''|*[!0-9]*)
+      die "Invalid printer count: $local_count"
+      ;;
+  esac
+  
+  if [ "$local_count" -lt 1 ]; then
     die "Invalid printer count: $local_count"
   fi
-  for ((i=1; i<=local_count; i++)); do
+  
+  i=1
+  while [ "$i" -le "$local_count" ]; do
     echo "---- Printer #$i ----" >/dev/tty
     add_printer_interactive
+    i=$((i + 1))
   done
 fi
 
@@ -207,31 +281,44 @@ case "$LOG_LEVEL" in
   *) die "Invalid --log-level: $LOG_LEVEL (debug|info|warn|error)" ;;
 esac
 
-# Create service user/group if missing
-if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-  useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
-fi
+# Create dirs first
+CONFIG_DIR="$(dirname "$CONFIG_PATH")"
+BIN_DIR="$(dirname "$BIN_DST")"
+install -d -m 0755 "$CONFIG_DIR"
+install -d -m 0755 "$STATE_DIR"
+install -d -m 0755 "$BIN_DIR"
+chown -R "$SERVICE_USER:$SERVICE_USER" "$STATE_DIR"
 
 # Install binary
 install -m 0755 "$BIN_SRC" "$BIN_DST"
 
-# Create dirs
-install -d -m 0755 /etc/printer-connector
-install -d -m 0755 "$STATE_DIR"
-chown -R "$SERVICE_USER:$SERVICE_USER" "$STATE_DIR"
-
 # Build printers JSON array
 printers_json=""
-for spec in "${PRINTER_SPECS[@]}"; do
-  IFS='|' read -r pid pname purl <<<"$spec"
-  [[ -n "${pid:-}" && -n "${pname:-}" && -n "${purl:-}" ]] || die "Invalid --printer spec: $spec (expected ID|NAME|URL)"
-  [[ "$purl" == http://* || "$purl" == https://* ]] || die "Printer URL must start with http:// or https:// (got: $purl)"
+echo "$PRINTER_SPECS" | while IFS= read -r spec; do
+  [ -z "$spec" ] && continue
+  
+  # Parse pipe-separated values
+  pid="${spec%%|*}"
+  rest="${spec#*|}"
+  pname="${rest%%|*}"
+  purl="${rest#*|}"
+  
+  [ -z "$pid" ] || [ -z "$pname" ] || [ -z "$purl" ] && die "Invalid --printer spec: $spec (expected ID|NAME|URL)"
+  
+  case "$purl" in
+    http://*|https://)
+      ;;
+    *)
+      die "Printer URL must start with http:// or https:// (got: $purl)"
+      ;;
+  esac
 
-  pname_esc="${pname//\"/\\\"}"
-  purl_esc="${purl//\"/\\\"}"
+  # Escape quotes in name and url
+  pname_esc="$(echo "$pname" | sed 's/\"/\\\"/g')"
+  purl_esc="$(echo "$purl" | sed 's/\"/\\\"/g')"
 
   entry="{\"printer_id\":${pid},\"name\":\"${pname_esc}\",\"base_url\":\"${purl_esc}\"}"
-  if [[ -z "$printers_json" ]]; then
+  if [ -z "$printers_json" ]; then
     printers_json="$entry"
   else
     printers_json="${printers_json},${entry}"
@@ -240,7 +327,7 @@ done
 
 # Write config (paired OR pairing token)
 tmp_cfg="$(mktemp)"
-if [[ "$SKIP_PAIR" == "true" ]]; then
+if [ "$SKIP_PAIR" = "true" ]; then
   cat >"$tmp_cfg" <<JSON
 {
   "cloud_url": "${CLOUD_URL}",
@@ -301,7 +388,7 @@ WantedBy=multi-user.target
 UNIT
 
 # Pair once (as root) to exchange pairing token for connector_id + connector_secret
-if [[ "$SKIP_PAIR" != "true" ]]; then
+if [ "$SKIP_PAIR" != "true" ]; then
   echo "==> Running initial pairing (one-shot)..." >/dev/tty
   echo "    (This will rewrite ${CONFIG_PATH} to include connector_id + connector_secret and remove pairing_token)" >/dev/tty
   "${BIN_DST}" --config "${CONFIG_PATH}" --log-level debug --once || die "Pairing run failed"
@@ -312,7 +399,7 @@ fi
 
 systemctl daemon-reload
 
-if [[ "$NO_START" != "true" ]]; then
+if [ "$NO_START" != "true" ]; then
   systemctl enable --now "${SERVICE_NAME}.service"
   echo "==> Service started. Logs:" >/dev/tty
   echo "    journalctl -u ${SERVICE_NAME} -f" >/dev/tty
