@@ -143,26 +143,26 @@ Choose the installation method for your printer type:
 Run this **one command** on your Raspberry Pi:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh | sudo bash
 ```
 
 Or download and run manually:
 
 ```bash
 # Download the installer
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh -o install-klipper.sh
 
 # Make it executable
-chmod +x install.sh
+chmod +x install-klipper.sh
 
 # Run the installer
-sudo ./install.sh
+sudo ./install-klipper.sh
 ```
 
 The installer will ask you for:
 1. **Cloud URL**: Your PrintDock server address (e.g., `https://printdock.example.com`)
-2. **Pairing Token**: The token you got from PrintDock
-3. **Printer Details**: Name and Moonraker URL for each printer
+2. **Pairing Token**: The token you got from PrintDock (one token per printer)
+3. **Printer Details**: Name and Moonraker URL for your printer
 
 #### Option 2: Creality K1 / K1 Max
 
@@ -293,8 +293,6 @@ The uninstaller automatically detects your installation type and removes:
 
 ## ⚙️ Configuration
 
-## ⚙️ Configuration
-
 The configuration file is automatically created during installation at:
 - **Klipper**: `/usr/data/printer-connector/config.json`
 - **K1 Max**: `/opt/printer-connector/config.json`
@@ -312,20 +310,16 @@ The configuration file is automatically created during installation at:
   "state_dir": "/var/lib/printer-connector",
   "moonraker": [
     {
-      "printer_id": 1,
+      "printer_id": 0,
       "name": "Voron 2.4",
       "base_url": "http://127.0.0.1:7125",
       "ui_port": 80
-    },
-    {
-      "printer_id": 2,
-      "name": "K1 Max",
-      "base_url": "http://192.168.1.99:7125",
-      "ui_port": 4409
     }
   ]
 }
 ```
+
+**Note:** Each connector instance manages ONE printer. The `printer_id` is automatically assigned by the backend during pairing. If you have multiple printers, install a separate connector for each one with its own pairing token.
 
 ### Configuration Fields Explained
 
@@ -340,7 +334,7 @@ The configuration file is automatically created during installation at:
 | `push_snapshots_seconds` | How often to send status updates | `30` (default) |
 | `heartbeat_seconds` | How often to send "I'm alive" signal | `10` (default) |
 | `state_dir` | Directory for persistent state | `/var/lib/printer-connector` |
-| `moonraker.printer_id` | Unique ID from cloud service | `1` |
+| `moonraker.printer_id` | Auto-assigned by backend during pairing | `0` |
 | `moonraker.name` | Display name for this printer | `"Voron 2.4"` |
 | `moonraker.base_url` | Moonraker API endpoint | `http://127.0.0.1:7125` |
 | `moonraker.ui_port` | Optional web UI port | `80` or `4409` |
@@ -366,7 +360,9 @@ The configuration file is automatically created during installation at:
 **Solution:**
 ```bash
 # Make sure you're using sudo
-sudo ./install.sh
+sudo ./install-klipper.sh   # For vanilla Klipper
+# or
+sudo ./install-k1.sh        # For K1 Max
 
 # Check if you're root on K1
 whoami  # should show "root"
@@ -566,31 +562,26 @@ Options:
 
 ### Running Multiple Printers
 
-You can monitor multiple printers with a single connector:
+**Important:** Each connector instance is paired with ONE printer. The backend assigns one printer per pairing token.
 
-```json
-{
-  "moonraker": [
-    {
-      "printer_id": 1,
-      "name": "Voron 2.4",
-      "base_url": "http://192.168.1.100:7125"
-    },
-    {
-      "printer_id": 2,
-      "name": "Ender 3",
-      "base_url": "http://192.168.1.101:7125"
-    },
-    {
-      "printer_id": 3,
-      "name": "K1 Max",
-      "base_url": "http://192.168.1.102:7125"
-    }
-  ]
-}
+If you have multiple printers, you need to:
+1. Get a separate pairing token for each printer from PrintDock
+2. Install a separate connector instance for each printer
+3. Use different configuration files and service names
+
+**Example for 2 printers:**
+
+```bash
+# Printer 1 - Voron
+sudo ./install-klipper.sh --config /usr/data/printer-connector-voron/config.json \
+  --pairing-token PAIR_voron_token
+
+# Printer 2 - Ender 3  
+sudo ./install-klipper.sh --config /usr/data/printer-connector-ender/config.json \
+  --pairing-token PAIR_ender_token
 ```
 
-**Note:** Each printer needs a unique `printer_id` that matches your cloud service configuration.
+**Note:** Each connector will have its own systemd service and run independently.
 
 ---
 
@@ -599,14 +590,15 @@ You can monitor multiple printers with a single connector:
 For automated deployments or scripts:
 
 ```bash
-sudo ./install.sh \
+sudo ./install-klipper.sh \
   --bin ./printer-connector \
   --cloud-url https://printdock.example.com \
   --pairing-token PAIR_abc123 \
-  --printer "1|Voron 2.4|http://127.0.0.1:7125" \
-  --printer "2|K1 Max|http://192.168.1.99:7125" \
+  --printer "0|Voron 2.4|http://127.0.0.1:7125" \
   --log-level info
 ```
+
+**Note:** Each installation handles one printer. For multiple printers, run the installer separately with different pairing tokens.
 
 ---
 
@@ -663,7 +655,7 @@ printer-connector/
 │       └── backoff.go      # Exponential backoff
 ├── config/
 │   └── config.dev.json     # Development config template
-├── install.sh              # Klipper installer
+├── install-klipper.sh      # Vanilla Klipper installer
 ├── install-k1.sh           # K1 Max installer
 ├── uninstall.sh            # Uninstaller
 ├── go.mod                  # Go module definition
@@ -737,7 +729,7 @@ A: Go provides:
 - Great stdlib for HTTP/JSON
 
 **Q: Can I run multiple connectors on one Pi?**  
-A: Yes, but you'll need to use different config files and service names. Usually one connector can handle multiple printers.
+A: Yes! Each connector manages one printer, so if you have multiple printers connected to the same Pi, install separate connector instances with different config files and service names.
 
 **Q: Does it support webcams?**  
 A: Not yet. Currently only status and control. Webcam streaming may be added in a future version.
