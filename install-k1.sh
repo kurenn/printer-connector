@@ -114,18 +114,37 @@ if [ -f "$MANUAL_BIN" ]; then
     chmod +x "$BIN_FILE"
     success "Binary installed from manual transfer"
 else
-    # Try to download from GitHub
-    info "Attempting to download from GitHub..."
+    # Try to download from GitHub raw
+    info "Downloading binary from GitHub..."
     
-    if wget --no-check-certificate -O "$BIN_FILE" "https://github.com/$GITHUB_REPO/raw/main/printer-connector-mips" 2>/dev/null; then
-        chmod +x "$BIN_FILE"
-        success "Binary downloaded and made executable"
-    else
+    # Try multiple download URLs
+    DOWNLOAD_URLS="
+https://github.com/$GITHUB_REPO/releases/download/v0.1.0/printer-connector-mips
+https://raw.githubusercontent.com/$GITHUB_REPO/main/printer-connector-mips
+"
+    
+    DOWNLOADED=0
+    for URL in $DOWNLOAD_URLS; do
+        info "Trying: $URL"
+        if wget --no-check-certificate -O "$BIN_FILE" "$URL" 2>/dev/null; then
+            # Check if download was successful (file size > 1MB)
+            if [ -f "$BIN_FILE" ] && [ $(wc -c < "$BIN_FILE") -gt 1000000 ]; then
+                chmod +x "$BIN_FILE"
+                success "Binary downloaded successfully!"
+                DOWNLOADED=1
+                break
+            else
+                rm -f "$BIN_FILE"
+            fi
+        fi
+    done
+    
+    if [ $DOWNLOADED -eq 0 ]; then
         warn "Could not download from GitHub"
         echo ""
-        error "Binary not found. Please manually transfer it:
+        error "Binary download failed. Please manually transfer it:
 
-1. On your computer, in the printer-connector directory:
+1. On your computer:
    scp printer-connector-mips root@<K1_IP>:/tmp/printer-connector
 
 2. Then re-run this installer:
