@@ -1,9 +1,15 @@
 package cloud
 
 type RegisterRequest struct {
-	PairingToken string     `json:"pairing_token"`
-	SiteName     string     `json:"site_name,omitempty"`
-	Device       DeviceInfo `json:"device"`
+	PairingToken string       `json:"pairing_token"`
+	SiteName     string       `json:"site_name,omitempty"`
+	Device       DeviceInfo   `json:"device"`
+	Printers     []PrinterInfo `json:"printers,omitempty"`
+}
+
+type PrinterInfo struct {
+	Name   string `json:"name"`
+	UIPort int    `json:"ui_port,omitempty"`
 }
 
 type DeviceInfo struct {

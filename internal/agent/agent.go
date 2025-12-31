@@ -108,6 +108,15 @@ func (a *Agent) pair(ctx context.Context) error {
 		uiPort = a.cfg.Moonraker[0].UIPort
 	}
 
+	// Build printers array from moonraker config
+	printers := make([]cloud.PrinterInfo, 0, len(a.cfg.Moonraker))
+	for _, m := range a.cfg.Moonraker {
+		printers = append(printers, cloud.PrinterInfo{
+			Name:   m.Name,
+			UIPort: m.UIPort,
+		})
+	}
+
 	req := cloud.RegisterRequest{
 		PairingToken: a.cfg.PairingToken,
 		SiteName:     a.cfg.SiteName,
@@ -119,6 +128,7 @@ func (a *Agent) pair(ctx context.Context) error {
 			IP:       getLocalIP(),
 			UIPort:   uiPort,
 		},
+		Printers: printers,
 	}
 
 	a.log.Info("pairing connector (register)")
