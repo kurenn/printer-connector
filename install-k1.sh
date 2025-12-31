@@ -1,0 +1,223 @@
+#!/bin/sh
+set -e
+
+# Interactive installer for K1 Max printer
+# Usage 1: Transfer binary first, then run installer
+#   scp printer-connector-mips root@<K1_IP>:/tmp/printer-connector
+#   scp install-k1.sh root@<K1_IP>:/tmp/
+#   ssh root@<K1_IP> "cd /tmp && sh install-k1.sh"
+#
+# Usage 2: Run directly (will attempt GitHub download)
+#   ssh root@<K1_IP> "sh -c 'cd /tmp && sh install-k1.sh'"
+
+INSTALL_DIR="/opt/printer-connector"
+CONFIG_FILE="$INSTALL_DIR/config.json"
+BIN_FILE="$INSTALL_DIR/printer-connector"
+STATE_DIR="$INSTALL_DIR/state"
+GITHUB_REPO="kurenn/printer-connector"
+CLOUD_URL="https://e75e93c7cdb6.ngrok-free.app"
+MOONRAKER_URL="http://127.0.0.1:7125"
+
+# Check if binary was manually transferred to /tmp
+MANUAL_BIN="/tmp/printer-connector"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+info() {
+    printf "${BLUE}==>${NC} %s\n" "$1"
+}
+
+success() {
+    printf "${GREEN}✓${NC} %s\n" "$1"
+}
+
+warn() {
+    printf "${YELLOW}!${NC} %s\n" "$1"
+}
+
+error() {
+    printf "${RED}✗${NC} %s\n" "$1"
+    exit 1
+}
+
+prompt() {
+    printf "${BLUE}?${NC} %s: " "$1"
+}
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    error "This script must be run as root. Use: sudo sh install-k1.sh"
+fi
+
+# Welcome banner
+echo ""
+info "═══════════════════════════════════════"
+info "  Printer Connector Installer (K1 Max)"
+info "═══════════════════════════════════════"
+echo ""
+
+# Check architecture
+ARCH=$(uname -m)
+if [ "$ARCH" != "mips" ]; then
+    warn "Detected architecture: $ARCH (expected: mips)"
+    warn "This installer is designed for K1 Max printers"
+    prompt "Continue anyway? (y/N)"
+    read -r continue_install
+    if [ "$continue_install" != "y" ] && [ "$continue_install" != "Y" ]; then
+        error "Installation cancelled"
+    fi
+fi
+
+# Step 1: Gather information
+echo ""
+info "Step 1: Configuration"
+echo ""
+
+prompt "Enter your pairing token"
+read -r PAIRING_TOKEN
+
+if [ -z "$PAIRING_TOKEN" ]; then
+    error "Pairing token is required"
+fi
+
+prompt "Enter printer name (e.g., K1 Max)"
+read -r PRINTER_NAME
+
+if [ -z "$PRINTER_NAME" ]; then
+    PRINTER_NAME="K1 Max"
+    info "Using default name: $PRINTER_NAME"
+fi
+
+prompt "Enter site name (optional, press Enter to skip)"
+read -r SITE_NAME
+
+# Step 2: Create directories
+echo ""
+info "Step 2: Creating directories"
+mkdir -p "$INSTALL_DIR"
+mkdir -p "$STATE_DIR"
+success "Directories created at $INSTALL_DIR"
+
+# Step 3: Download binary
+echo ""
+info "Step 3: Installing printer-connector binary"
+
+# Check if binary was manually transferred
+if [ -f "$MANUAL_BIN" ]; then
+    info "Found manually transferred binary at $MANUAL_BIN"
+    cp "$MANUAL_BIN" "$BIN_FILE"
+    chmod +x "$BIN_FILE"
+    success "Binary installed from manual transfer"
+else
+    # Try to download from GitHub
+    info "Attempting to download from GitHub..."
+    
+    if wget --no-check-certificate -O "$BIN_FILE" "https://github.com/$GITHUB_REPO/raw/main/printer-connector-mips" 2>/dev/null; then
+        chmod +x "$BIN_FILE"
+        success "Binary downloaded and made executable"
+    else
+        warn "Could not download from GitHub"
+        echo ""
+        error "Binary not found. Please manually transfer it:
+
+1. On your computer, in the printer-connector directory:
+   scp printer-connector-mips root@<K1_IP>:/tmp/printer-connector
+
+2. Then re-run this installer:
+   ssh root@<K1_IP> 'cd /tmp && sh install-k1.sh'
+"
+    fi
+fi
+
+# Step 4: Generate config
+echo ""
+info "Step 4: Generating configuration"
+
+# Create config JSON
+cat > "$CONFIG_FILE" <<EOF
+{
+  "cloud_url": "$CLOUD_URL",
+  "pairing_token": "$PAIRING_TOKEN",
+  "site_name": "${SITE_NAME:-K1 Max}",
+  "poll_commands_seconds": 5,
+  "push_snapshots_seconds": 30,
+  "heartbeat_seconds": 15,
+  "state_dir": "$STATE_DIR",
+  "moonraker": [
+    {
+      "printer_id": 0,
+      "name": "$PRINTER_NAME",
+      "base_url": "$MOONRAKER_URL"
+    }
+  ]
+}
+EOF
+
+chmod 600 "$CONFIG_FILE"
+success "Configuration file created at $CONFIG_FILE"
+
+# Step 5: Test Moonraker connection
+echo ""
+info "Step 5: Testing Moonraker connection"
+if wget --no-check-certificate -qO- --timeout=3 "$MOONRAKER_URL/server/info" >/dev/null 2>&1 || \
+   curl -fsSLk --max-time 3 "$MOONRAKER_URL/server/info" >/dev/null 2>&1; then
+    success "Moonraker is reachable at $MOONRAKER_URL"
+else
+    warn "Could not connect to Moonraker at $MOONRAKER_URL"
+    warn "Make sure Moonraker is running before starting the connector"
+fi
+
+# Step 6: Perform pairing
+echo ""
+info "Step 6: Pairing with cloud"
+info "Running connector once to complete pairing..."
+
+if "$BIN_FILE" --config "$CONFIG_FILE" --log-level info --once 2>&1 | tee /tmp/pairing.log; then
+    success "Pairing completed successfully!"
+    
+    # Check if config was updated (pairing_token should be removed)
+    if grep -q '"connector_id"' "$CONFIG_FILE"; then
+        success "Connector registered and config updated"
+        # Show connector ID
+        CONNECTOR_ID=$(grep '"connector_id"' "$CONFIG_FILE" | sed -E 's/.*"([^"]+)".*/\1/')
+        info "Connector ID: $CONNECTOR_ID"
+    else
+        warn "Pairing may have failed. Check the logs above."
+    fi
+else
+    warn "Pairing failed. You can try again manually:"
+    echo "  $BIN_FILE --config $CONFIG_FILE --log-level debug --once"
+fi
+
+# Installation complete
+echo ""
+info "═══════════════════════════════════════"
+success "Installation Complete!"
+info "═══════════════════════════════════════"
+echo ""
+info "Installation directory: $INSTALL_DIR"
+info "Configuration file: $CONFIG_FILE"
+info "Binary: $BIN_FILE"
+echo ""
+info "To start the connector manually:"
+echo "  $BIN_FILE --config $CONFIG_FILE --log-level info"
+echo ""
+info "To run in debug mode:"
+echo "  $BIN_FILE --config $CONFIG_FILE --log-level debug"
+echo ""
+info "To run in background:"
+echo "  nohup $BIN_FILE --config $CONFIG_FILE --log-level info > $INSTALL_DIR/connector.log 2>&1 &"
+echo ""
+info "To view logs:"
+echo "  tail -f $INSTALL_DIR/connector.log"
+echo ""
+info "To stop the connector:"
+echo "  pkill printer-connector"
+echo ""
+warn "Note: This is running manually. For production, set up as a systemd service."
+echo ""
