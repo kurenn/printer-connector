@@ -200,15 +200,10 @@ fi
 
 # Step 7: Setup service
 echo ""
-info "Step 7: Service setup"
-prompt "Setup as auto-start service? (y/N)"
-read -r setup_service
+info "Step 7: Setting up auto-start service"
 
-if [ "$setup_service" = "y" ] || [ "$setup_service" = "Y" ]; then
-    info "Creating service script..."
-    
-    # Create service script in /opt where we have space
-    cat > "$INSTALL_DIR/service.sh" <<'SERVICEEOF'
+# Create service script in /opt where we have space
+cat > "$INSTALL_DIR/service.sh" <<'SERVICEEOF'
 #!/bin/sh
 
 BIN="/opt/printer-connector/printer-connector"
@@ -252,47 +247,43 @@ case "$1" in
 esac
 SERVICEEOF
 
-    chmod +x "$INSTALL_DIR/service.sh"
-    success "Service script created"
+chmod +x "$INSTALL_DIR/service.sh"
+success "Service script created"
+
+# Try to create symlink in /etc/init.d for auto-start
+if ln -sf "$INSTALL_DIR/service.sh" /etc/init.d/S99printer-connector 2>/dev/null; then
+    success "Auto-start enabled (symlink created)"
     
-    # Try to create symlink in /etc/init.d for auto-start
-    if ln -sf "$INSTALL_DIR/service.sh" /etc/init.d/S99printer-connector 2>/dev/null; then
-        success "Auto-start enabled (symlink created)"
-        
-        # Start the service
-        /etc/init.d/S99printer-connector start
-        sleep 2
-        
-        if ps | grep -v grep | grep printer-connector > /dev/null; then
-            success "Service started successfully!"
-        else
-            warn "Service may have failed to start. Check logs."
-        fi
-        
-        echo ""
-        info "Service commands:"
-        echo "  /etc/init.d/S99printer-connector start    # Start"
-        echo "  /etc/init.d/S99printer-connector stop     # Stop"
-        echo "  /etc/init.d/S99printer-connector restart  # Restart"
-        echo "  tail -f $INSTALL_DIR/connector.log        # View logs"
-        echo ""
-        info "Service will auto-start on boot!"
-        
+    # Start the service
+    /etc/init.d/S99printer-connector start
+    sleep 2
+    
+    if ps | grep -v grep | grep printer-connector > /dev/null; then
+        success "Service started successfully!"
     else
-        warn "Could not create symlink in /etc/init.d (filesystem full/read-only)"
-        echo ""
-        info "Manual startup required after each reboot:"
-        echo "  $INSTALL_DIR/service.sh start"
-        echo ""
-        info "Or create symlink manually if possible:"
-        echo "  ln -sf $INSTALL_DIR/service.sh /etc/init.d/S99printer-connector"
-        
-        # Try to start anyway
-        "$INSTALL_DIR/service.sh" start
+        warn "Service may have failed to start. Check logs."
     fi
     
+    echo ""
+    info "Service commands:"
+    echo "  /etc/init.d/S99printer-connector start    # Start"
+    echo "  /etc/init.d/S99printer-connector stop     # Stop"
+    echo "  /etc/init.d/S99printer-connector restart  # Restart"
+    echo "  tail -f $INSTALL_DIR/connector.log        # View logs"
+    echo ""
+    success "Service will auto-start on boot!"
+    
 else
-    info "Skipping service setup"
+    warn "Could not create symlink in /etc/init.d (filesystem full/read-only)"
+    echo ""
+    info "Manual startup required after each reboot:"
+    echo "  $INSTALL_DIR/service.sh start"
+    echo ""
+    info "Or create symlink manually if possible:"
+    echo "  ln -sf $INSTALL_DIR/service.sh /etc/init.d/S99printer-connector"
+    
+    # Try to start anyway
+    "$INSTALL_DIR/service.sh" start
 fi
 
 # Installation complete
