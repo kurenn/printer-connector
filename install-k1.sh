@@ -198,6 +198,62 @@ else
     echo "  $BIN_FILE --config $CONFIG_FILE --log-level debug --once"
 fi
 
+# Step 7: Setup service
+echo ""
+info "Step 7: Service setup"
+prompt "Setup as auto-start service? (y/N)"
+read -r setup_service
+
+if [ "$setup_service" = "y" ] || [ "$setup_service" = "Y" ]; then
+    info "Creating systemd service..."
+    
+    # Create systemd service file
+    cat > /etc/systemd/system/printer-connector.service <<EOF
+[Unit]
+Description=Printer Connector Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$BIN_FILE --config $CONFIG_FILE --log-level info
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload systemd
+    systemctl daemon-reload
+    
+    # Enable service
+    systemctl enable printer-connector.service
+    
+    # Start service
+    systemctl start printer-connector.service
+    
+    sleep 2
+    
+    # Check status
+    if systemctl is-active --quiet printer-connector.service; then
+        success "Service started successfully!"
+        echo ""
+        info "Service commands:"
+        echo "  systemctl status printer-connector   # Check status"
+        echo "  systemctl restart printer-connector  # Restart"
+        echo "  systemctl stop printer-connector     # Stop"
+        echo "  journalctl -u printer-connector -f   # View logs"
+    else
+        warn "Service failed to start. Check logs with:"
+        echo "  journalctl -u printer-connector -n 50"
+    fi
+else
+    info "Skipping service setup"
+fi
+
 # Installation complete
 echo ""
 info "═══════════════════════════════════════"
@@ -208,20 +264,21 @@ info "Installation directory: $INSTALL_DIR"
 info "Configuration file: $CONFIG_FILE"
 info "Binary: $BIN_FILE"
 echo ""
-info "To start the connector manually:"
-echo "  $BIN_FILE --config $CONFIG_FILE --log-level info"
-echo ""
-info "To run in debug mode:"
-echo "  $BIN_FILE --config $CONFIG_FILE --log-level debug"
-echo ""
-info "To run in background:"
-echo "  nohup $BIN_FILE --config $CONFIG_FILE --log-level info > $INSTALL_DIR/connector.log 2>&1 &"
-echo ""
-info "To view logs:"
-echo "  tail -f $INSTALL_DIR/connector.log"
-echo ""
-info "To stop the connector:"
-echo "  pkill printer-connector"
-echo ""
-warn "Note: This is running manually. For production, set up as a systemd service."
+
+if [ "$setup_service" = "y" ] || [ "$setup_service" = "Y" ]; then
+    info "Service is running! View logs with:"
+    echo "  journalctl -u printer-connector -f"
+else
+    info "To start the connector manually:"
+    echo "  $BIN_FILE --config $CONFIG_FILE --log-level info"
+    echo ""
+    info "To run in debug mode:"
+    echo "  $BIN_FILE --config $CONFIG_FILE --log-level debug"
+    echo ""
+    info "To run in background:"
+    echo "  nohup $BIN_FILE --config $CONFIG_FILE --log-level info > $INSTALL_DIR/connector.log 2>&1 &"
+    echo ""
+    info "To setup service later:"
+    echo "  Run this installer again or manually create systemd service"
+fi
 echo ""
