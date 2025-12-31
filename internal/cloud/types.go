@@ -12,6 +12,7 @@ type DeviceInfo struct {
 	OS       string `json:"os,omitempty"`
 	Version  string `json:"version,omitempty"`
 	IP       string `json:"ip,omitempty"`
+	UIPort   int    `json:"ui_port,omitempty"`
 }
 
 type RegisterResponse struct {

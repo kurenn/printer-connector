@@ -93,9 +93,6 @@ if [ -z "$PRINTER_NAME" ]; then
     info "Using default name: $PRINTER_NAME"
 fi
 
-prompt "Enter site name (optional, press Enter to skip)"
-read -r SITE_NAME
-
 # Step 2: Create directories
 echo ""
 info "Step 2: Creating directories"
@@ -147,7 +144,6 @@ cat > "$CONFIG_FILE" <<EOF
 {
   "cloud_url": "$CLOUD_URL",
   "pairing_token": "$PAIRING_TOKEN",
-  "site_name": "${SITE_NAME:-K1 Max}",
   "poll_commands_seconds": 5,
   "push_snapshots_seconds": 30,
   "heartbeat_seconds": 15,
@@ -156,7 +152,8 @@ cat > "$CONFIG_FILE" <<EOF
     {
       "printer_id": 0,
       "name": "$PRINTER_NAME",
-      "base_url": "$MOONRAKER_URL"
+      "base_url": "$MOONRAKER_URL",
+      "ui_port": 4409
     }
   ]
 }

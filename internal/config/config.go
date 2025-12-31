@@ -13,6 +13,7 @@ type MoonrakerPrinter struct {
 	PrinterID int    `json:"printer_id"`
 	Name      string `json:"name"`
 	BaseURL   string `json:"base_url"`
+	UIPort    int    `json:"ui_port,omitempty"`
 }
 
 type Config struct {

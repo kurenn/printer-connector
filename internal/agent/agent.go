@@ -103,6 +103,11 @@ func (a *Agent) Run(ctx context.Context) error {
 func (a *Agent) pair(ctx context.Context) error {
 	hostname, _ := os.Hostname()
 
+	var uiPort int
+	if len(a.cfg.Moonraker) > 0 {
+		uiPort = a.cfg.Moonraker[0].UIPort
+	}
+
 	req := cloud.RegisterRequest{
 		PairingToken: a.cfg.PairingToken,
 		SiteName:     a.cfg.SiteName,
@@ -112,6 +117,7 @@ func (a *Agent) pair(ctx context.Context) error {
 			OS:       runtime.GOOS,
 			Version:  a.version,
 			IP:       getLocalIP(),
+			UIPort:   uiPort,
 		},
 	}
 
