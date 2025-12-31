@@ -80,13 +80,20 @@ func (c *Config) Validate() error {
 	}
 	seen := map[int]bool{}
 	for _, p := range c.Moonraker {
-		if p.PrinterID <= 0 {
-			return fmt.Errorf("moonraker printer_id must be > 0")
+		// Allow printer_id=0 during initial pairing (will be populated by Rails)
+		if p.PrinterID < 0 {
+			return fmt.Errorf("moonraker printer_id must be >= 0")
 		}
-		if seen[p.PrinterID] {
+		// After pairing, printer_id must be set
+		if !hasPair && p.PrinterID == 0 {
+			return fmt.Errorf("moonraker printer_id must be > 0 after pairing")
+		}
+		if p.PrinterID > 0 && seen[p.PrinterID] {
 			return fmt.Errorf("duplicate moonraker printer_id: %d", p.PrinterID)
 		}
-		seen[p.PrinterID] = true
+		if p.PrinterID > 0 {
+			seen[p.PrinterID] = true
+		}
 		if p.BaseURL == "" {
 			return fmt.Errorf("moonraker base_url required for printer_id %d", p.PrinterID)
 		}

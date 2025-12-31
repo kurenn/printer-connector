@@ -20,10 +20,16 @@ type RegisterResponse struct {
 	Credentials struct {
 		Secret string `json:"secret"`
 	} `json:"credentials"`
+	Printers []RegisteredPrinter `json:"printers,omitempty"`
 	Polling struct {
 		CommandsSeconds  int `json:"commands_seconds"`
 		SnapshotsSeconds int `json:"snapshots_seconds"`
 	} `json:"polling"`
+}
+
+type RegisteredPrinter struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 type HeartbeatRequest struct {

@@ -130,6 +130,20 @@ func (a *Agent) pair(ctx context.Context) error {
 		a.cfg.PushSnapshotsSeconds = resp.Polling.SnapshotsSeconds
 	}
 
+	// Auto-populate printer_ids from Rails response
+	if len(resp.Printers) > 0 {
+		for i, printer := range resp.Printers {
+			// Match by index (first printer in response -> first moonraker entry)
+			if i < len(a.cfg.Moonraker) {
+				a.cfg.Moonraker[i].PrinterID = printer.ID
+				a.log.Info("mapped printer",
+					"moonraker_name", a.cfg.Moonraker[i].Name,
+					"printer_id", printer.ID,
+					"rails_name", printer.Name)
+			}
+		}
+	}
+
 	if err := config.SaveAtomic(a.cfgPath, a.cfg); err != nil {
 		return err
 	}

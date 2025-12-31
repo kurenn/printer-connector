@@ -45,6 +45,7 @@ DESIGN GUIDELINES
   - internal/util: Backoff helper with jitter (0.75-1.25x multiplier).
   - cmd/connector: CLI flags --config (required), --log-level (debug|info|warn|error), --once (debug mode: run one iteration and exit).
 - Agent.Run() flow: if pairing_token present, call pair() first; then launch 3 goroutines; wait for ctx.Done() or first error from errCh.
+- Pairing: pair() exchanges pairing_token for connector_id + connector_secret, and automatically populates printer_ids from Rails response (matched by array index to cfg.Moonraker entries). Config is atomically rewritten with all credentials.
 - Commands: pollAndExecuteCommands fetches up to 20 commands, executes each sequentially, captures post-command snapshot, calls CompleteCommand with status="succeeded" or "failed".
 - Heartbeat: includes uptime_seconds, version, and per-printer reachability (pings QueryObjects to test).
 - Use context cancellation (SIGINT/SIGTERM captured in main) for graceful shutdown.
