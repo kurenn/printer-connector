@@ -205,154 +205,92 @@ prompt "Setup as auto-start service? (y/N)"
 read -r setup_service
 
 if [ "$setup_service" = "y" ] || [ "$setup_service" = "Y" ]; then
-    # Check if systemd exists
-    if [ -d "/etc/systemd/system" ]; then
-        info "Creating systemd service..."
-        
-        cat > /etc/systemd/system/printer-connector.service <<EOF
-[Unit]
-Description=Printer Connector Agent
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=$BIN_FILE --config $CONFIG_FILE --log-level info
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-        systemctl daemon-reload
-        systemctl enable printer-connector.service
-        systemctl start printer-connector.service
-        sleep 2
-        
-        if systemctl is-active --quiet printer-connector.service; then
-            success "Service started successfully!"
-        else
-            warn "Service failed to start. Check: journalctl -u printer-connector -n 50"
-        fi
-        
-    else
-        # Use init.d for embedded systems
-        info "Creating init.d service..."
-        
-        cat > /etc/init.d/printer-connector <<'INITEOF'
+    info "Creating service script..."
+    
+    # Create service script in /opt where we have space
+    cat > "$INSTALL_DIR/service.sh" <<'SERVICEEOF'
 #!/bin/sh
-### BEGIN INIT INFO
-# Provides:          printer-connector
-# Required-Start:    $network $remote_fs
-# Required-Stop:     $network $remote_fs
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: Printer Connector Agent
-### END INIT INFO
 
-INITEOF
-
-        cat >> /etc/init.d/printer-connector <<EOF
-BIN="$BIN_FILE"
-CONFIG="$CONFIG_FILE"
+BIN="/opt/printer-connector/printer-connector"
+CONFIG="/opt/printer-connector/config.json"
 PIDFILE="/var/run/printer-connector.pid"
-LOGFILE="$INSTALL_DIR/connector.log"
+LOGFILE="/opt/printer-connector/connector.log"
 
 start() {
-    if [ -f "\$PIDFILE" ] && kill -0 \$(cat "\$PIDFILE") 2>/dev/null; then
-        echo "Service already running"
-        return 1
+    if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+        echo "printer-connector already running"
+        return 0
     fi
     echo "Starting printer-connector..."
-    nohup "\$BIN" --config "\$CONFIG" --log-level info >> "\$LOGFILE" 2>&1 &
-    echo \$! > "\$PIDFILE"
+    nohup "$BIN" --config "$CONFIG" --log-level info >> "$LOGFILE" 2>&1 &
+    echo $! > "$PIDFILE"
     sleep 2
-    if kill -0 \$(cat "\$PIDFILE") 2>/dev/null; then
-        echo "Started successfully"
+    if kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+        echo "OK"
     else
-        echo "Failed to start"
-        rm -f "\$PIDFILE"
-        return 1
+        echo "FAIL"
+        rm -f "$PIDFILE"
     fi
 }
 
 stop() {
-    if [ ! -f "\$PIDFILE" ]; then
-        echo "Service not running"
-        return 1
+    if [ ! -f "$PIDFILE" ]; then
+        echo "printer-connector not running"
+        return 0
     fi
     echo "Stopping printer-connector..."
-    kill \$(cat "\$PIDFILE") 2>/dev/null
-    rm -f "\$PIDFILE"
-    echo "Stopped"
+    kill $(cat "$PIDFILE") 2>/dev/null
+    rm -f "$PIDFILE"
+    echo "OK"
 }
 
-status() {
-    if [ -f "\$PIDFILE" ] && kill -0 \$(cat "\$PIDFILE") 2>/dev/null; then
-        echo "Service is running (PID: \$(cat "\$PIDFILE"))"
-        return 0
-    else
-        echo "Service is not running"
-        return 1
-    fi
-}
-
-case "\$1" in
-    start)
-        start
-        ;;
-    stop)
-        stop
-        ;;
-    restart)
-        stop
-        sleep 2
-        start
-        ;;
-    status)
-        status
-        ;;
-    *)
-        echo "Usage: \$0 {start|stop|restart|status}"
-        exit 1
-        ;;
+case "$1" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop; sleep 2; start ;;
+    *) echo "Usage: $0 {start|stop|restart}"; exit 1 ;;
 esac
-EOF
+SERVICEEOF
 
-        chmod +x /etc/init.d/printer-connector
+    chmod +x "$INSTALL_DIR/service.sh"
+    success "Service script created"
+    
+    # Try to create symlink in /etc/init.d for auto-start
+    if ln -sf "$INSTALL_DIR/service.sh" /etc/init.d/S99printer-connector 2>/dev/null; then
+        success "Auto-start enabled (symlink created)"
         
-        # Enable auto-start (try different methods)
-        if command -v update-rc.d >/dev/null 2>&1; then
-            update-rc.d printer-connector defaults
-        elif command -v rc-update >/dev/null 2>&1; then
-            rc-update add printer-connector default
+        # Start the service
+        /etc/init.d/S99printer-connector start
+        sleep 2
+        
+        if ps | grep -v grep | grep printer-connector > /dev/null; then
+            success "Service started successfully!"
         else
-            # Manual symlink method
-            ln -sf /etc/init.d/printer-connector /etc/rc.d/S99printer-connector 2>/dev/null || true
+            warn "Service may have failed to start. Check logs."
         fi
         
-        # Start service
-        /etc/init.d/printer-connector start
+        echo ""
+        info "Service commands:"
+        echo "  /etc/init.d/S99printer-connector start    # Start"
+        echo "  /etc/init.d/S99printer-connector stop     # Stop"
+        echo "  /etc/init.d/S99printer-connector restart  # Restart"
+        echo "  tail -f $INSTALL_DIR/connector.log        # View logs"
+        echo ""
+        info "Service will auto-start on boot!"
         
-        success "Init.d service created and started!"
+    else
+        warn "Could not create symlink in /etc/init.d (filesystem full/read-only)"
+        echo ""
+        info "Manual startup required after each reboot:"
+        echo "  $INSTALL_DIR/service.sh start"
+        echo ""
+        info "Or create symlink manually if possible:"
+        echo "  ln -sf $INSTALL_DIR/service.sh /etc/init.d/S99printer-connector"
+        
+        # Try to start anyway
+        "$INSTALL_DIR/service.sh" start
     fi
     
-    echo ""
-    info "Service commands:"
-    if [ -d "/etc/systemd/system" ]; then
-        echo "  systemctl status printer-connector   # Check status"
-        echo "  systemctl restart printer-connector  # Restart"
-        echo "  systemctl stop printer-connector     # Stop"
-        echo "  journalctl -u printer-connector -f   # View logs"
-    else
-        echo "  /etc/init.d/printer-connector status   # Check status"
-        echo "  /etc/init.d/printer-connector restart  # Restart"
-        echo "  /etc/init.d/printer-connector stop     # Stop"
-        echo "  tail -f $INSTALL_DIR/connector.log     # View logs"
-    fi
 else
     info "Skipping service setup"
 fi
