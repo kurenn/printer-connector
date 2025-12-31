@@ -184,14 +184,35 @@ fi
 # Run pairing
 info "Pairing with cloud (this may take a few seconds)..."
 echo ""
-info "Running: $BIN_FILE --config $CONFIG_FILE --log-level info --once"
+info "Binary location: $BIN_FILE"
+info "Config location: $CONFIG_FILE"
+info "Testing binary execution..."
+
+# Test if binary is executable
+if [ ! -x "$BIN_FILE" ]; then
+    error "Binary is not executable: $BIN_FILE"
+fi
+
+# Show what we're about to run
+echo ""
+echo "==============================================="
+echo "Running pairing command:"
+echo "$BIN_FILE --config $CONFIG_FILE --log-level info --once"
+echo "==============================================="
 echo ""
 
-# Run pairing with visible output
-"$BIN_FILE" --config "$CONFIG_FILE" --log-level info --once
+# Run pairing with visible output (don't capture)
+set +e
+"$BIN_FILE" --config "$CONFIG_FILE" --log-level info --once 2>&1
 PAIRING_EXIT=$?
+set -e
 
 echo ""
+echo "==============================================="
+echo "Pairing command completed with exit code: $PAIRING_EXIT"
+echo "==============================================="
+echo ""
+
 if [ $PAIRING_EXIT -ne 0 ]; then
     error "Pairing failed with exit code $PAIRING_EXIT"
 fi
@@ -199,12 +220,16 @@ fi
 # Wait a moment for config to be written
 sleep 1
 
+# Show config file contents
+info "Checking config file for connector_id..."
+echo ""
+cat "$CONFIG_FILE"
+echo ""
+
 # Check if pairing succeeded (config should now have connector_id)
 if grep -q '"connector_id"' "$CONFIG_FILE"; then
     success "Pairing successful!"
 else
-    warn "Config contents:"
-    cat "$CONFIG_FILE"
     error "Pairing failed - connector_id not found in config"
 fi
 
