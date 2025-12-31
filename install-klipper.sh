@@ -183,13 +183,17 @@ fi
 
 # Run pairing
 info "Pairing with cloud (this may take a few seconds)..."
-PAIRING_OUTPUT=$("$BIN_FILE" --config "$CONFIG_FILE" --log-level info --once 2>&1)
+echo ""
+info "Running: $BIN_FILE --config $CONFIG_FILE --log-level info --once"
+echo ""
+
+# Run pairing with visible output
+"$BIN_FILE" --config "$CONFIG_FILE" --log-level info --once
 PAIRING_EXIT=$?
 
-echo "$PAIRING_OUTPUT"
-
+echo ""
 if [ $PAIRING_EXIT -ne 0 ]; then
-    error "Pairing failed with exit code $PAIRING_EXIT. Check output above for details."
+    error "Pairing failed with exit code $PAIRING_EXIT"
 fi
 
 # Wait a moment for config to be written
@@ -199,7 +203,9 @@ sleep 1
 if grep -q '"connector_id"' "$CONFIG_FILE"; then
     success "Pairing successful!"
 else
-    error "Pairing failed - connector_id not found in config. Check output above for details."
+    warn "Config contents:"
+    cat "$CONFIG_FILE"
+    error "Pairing failed - connector_id not found in config"
 fi
 
 # Create systemd service
