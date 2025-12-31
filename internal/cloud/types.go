@@ -11,6 +11,7 @@ type DeviceInfo struct {
 	Arch     string `json:"arch,omitempty"`
 	OS       string `json:"os,omitempty"`
 	Version  string `json:"version,omitempty"`
+	IP       string `json:"ip,omitempty"`
 }
 
 type RegisterResponse struct {

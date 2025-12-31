@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"os"
 	"runtime"
 	"time"
@@ -110,6 +111,7 @@ func (a *Agent) pair(ctx context.Context) error {
 			Arch:     runtime.GOARCH,
 			OS:       runtime.GOOS,
 			Version:  a.version,
+			IP:       getLocalIP(),
 		},
 	}
 
@@ -235,4 +237,20 @@ func (a *Agent) snapshotsLoop(ctx context.Context) error {
 		case <-tick.C:
 		}
 	}
+}
+
+// getLocalIP returns the non-loopback local IP address of the machine
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
 }
