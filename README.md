@@ -21,9 +21,61 @@ GOOS=linux GOARCH=amd64 go build -o dist/printer-connector-linux-amd64 ./cmd/con
 GOOS=linux GOARCH=arm64 go build -o dist/printer-connector-linux-arm64 ./cmd/connector
 ```
 
-## Run
+## Installation
+
+### Quick Install (Automated)
+
+**Vanilla Klipper / Linux with systemd:**
+```bash
+# Download and run the installer
+curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install.sh -o install.sh
+chmod +x install.sh
+sudo ./install.sh
+```
+
+**Creality K1 Max:**
+```bash
+# Download and run the K1 installer
+curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh -o install-k1.sh
+chmod +x install-k1.sh
+sudo sh install-k1.sh
+```
+
+The installer will:
+1. Prompt for your cloud URL and pairing token
+2. Configure printer connection details
+3. Create a systemd service (or init.d script on K1)
+4. Complete the pairing process
+5. Start the service automatically
+
+### Manual Run
 ```bash
 sudo ./printer-connector --config /etc/printer-connector/config.json
+```
+
+## Uninstallation
+
+To remove printer-connector from your system:
+
+```bash
+# Download and run the uninstaller
+curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/uninstall.sh -o uninstall.sh
+chmod +x uninstall.sh
+sudo ./uninstall.sh
+```
+
+The uninstaller automatically detects your installation type (vanilla Klipper or K1 Max) and removes:
+- Binary files
+- Configuration files (including credentials)
+- State directories
+- Systemd service (vanilla) or init.d scripts (K1)
+- Log files
+
+**Options:**
+```bash
+sudo ./uninstall.sh           # Interactive (asks for confirmation)
+sudo ./uninstall.sh --yes     # Skip confirmation
+sudo ./uninstall.sh --config-only  # Only remove config/credentials (keep binary)
 ```
 
 ## Example config
