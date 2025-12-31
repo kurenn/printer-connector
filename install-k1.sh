@@ -114,41 +114,26 @@ if [ -f "$MANUAL_BIN" ]; then
     chmod +x "$BIN_FILE"
     success "Binary installed from manual transfer"
 else
-    # Try to download from GitHub raw
+    # Download from GitHub
     info "Downloading binary from GitHub..."
     
-    # Try multiple download URLs
-    DOWNLOAD_URLS="
-https://github.com/$GITHUB_REPO/releases/download/v0.1.0/printer-connector-mips
-https://raw.githubusercontent.com/$GITHUB_REPO/main/printer-connector-mips
-"
+    DOWNLOAD_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/printer-connector-mips"
     
-    DOWNLOADED=0
-    for URL in $DOWNLOAD_URLS; do
-        info "Trying: $URL"
-        if wget --no-check-certificate -O "$BIN_FILE" "$URL" 2>/dev/null; then
-            # Check if download was successful (file size > 1MB)
-            if [ -f "$BIN_FILE" ] && [ $(wc -c < "$BIN_FILE") -gt 1000000 ]; then
-                chmod +x "$BIN_FILE"
-                success "Binary downloaded successfully!"
-                DOWNLOADED=1
-                break
-            else
-                rm -f "$BIN_FILE"
-            fi
+    if wget --no-check-certificate -O "$BIN_FILE" "$DOWNLOAD_URL" 2>&1 | grep -v "certificate"; then
+        # Check if download was successful (file size > 1MB)
+        if [ -f "$BIN_FILE" ] && [ $(wc -c < "$BIN_FILE") -gt 1000000 ]; then
+            chmod +x "$BIN_FILE"
+            success "Binary downloaded successfully ($(ls -lh $BIN_FILE | awk '{print $5}'))"
+        else
+            rm -f "$BIN_FILE"
+            error "Download failed: file too small or corrupted"
         fi
-    done
-    
-    if [ $DOWNLOADED -eq 0 ]; then
-        warn "Could not download from GitHub"
-        echo ""
-        error "Binary download failed. Please manually transfer it:
+    else
+        error "Failed to download binary from GitHub.
 
-1. On your computer:
-   scp printer-connector-mips root@<K1_IP>:/tmp/printer-connector
-
-2. Then re-run this installer:
-   ssh root@<K1_IP> 'cd /tmp && sh install-k1.sh'
+Please manually transfer it:
+  scp printer-connector-mips root@<K1_IP>:/tmp/printer-connector
+  ssh root@<K1_IP> 'cd /tmp && sh install-k1.sh'
 "
     fi
 fi
