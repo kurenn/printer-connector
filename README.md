@@ -16,6 +16,7 @@
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Verification](#verification)
+- [Updating](#updating)
 - [Uninstallation](#uninstallation)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
@@ -250,7 +251,103 @@ INFO connector_id=abc123 printer_id=1 msg="Snapshot pushed"
 
 ---
 
-## 🗑️ Uninstallation
+## � Updating
+
+To update Printer Connector to the latest version, use the update script:
+
+### Quick Update (Recommended)
+
+Run this **one command** on your printer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/update.sh | bash
+```
+
+Or download and run manually:
+
+```bash
+wget https://raw.githubusercontent.com/kurenn/printer-connector/main/update.sh
+bash update.sh
+```
+
+### What the Update Script Does:
+
+1. ✅ **Auto-detects** your installation (K1 Max or vanilla Klipper)
+2. ✅ **Checks** current and latest versions
+3. ✅ **Stops** the service gracefully
+4. ✅ **Backs up** the current binary (just in case)
+5. ✅ **Downloads** the latest version from GitHub
+6. ✅ **Verifies** the new binary works
+7. ✅ **Installs** and restarts the service
+
+### Update Output Example:
+
+```
+ℹ ═══════════════════════════════════════════════
+ℹ   Printer Connector - Update Script
+ℹ ═══════════════════════════════════════════════
+
+ℹ Detected Klipper installation at /home/pi/printer-connector
+ℹ Detected architecture: aarch64 (using printer-connector-linux-arm64)
+ℹ Current version: 0.1.0
+ℹ Checking for latest version...
+ℹ Latest version: 0.2.0
+ℹ Stopping printer-connector service...
+✓ Service stopped
+ℹ Backing up current binary...
+✓ Backup created: /home/pi/printer-connector/printer-connector.backup-20260103-143022
+ℹ Downloading latest version...
+✓ Downloaded successfully
+ℹ Verifying new binary...
+ℹ Installing new binary...
+✓ Binary updated
+ℹ New version: 0.2.0
+ℹ Starting printer-connector service...
+✓ Service started successfully
+
+✓ ═══════════════════════════════════════════════
+✓   Update completed successfully!
+✓ ═══════════════════════════════════════════════
+
+ℹ Summary:
+  Old version: 0.1.0
+  New version: 0.2.0
+  Backup: /home/pi/printer-connector/printer-connector.backup-20260103-143022
+```
+
+### Rollback (If Needed)
+
+If the update causes issues, you can roll back to the previous version:
+
+**For Klipper (systemd):**
+```bash
+sudo systemctl stop printer-connector
+mv ~/printer-connector/printer-connector.backup-* ~/printer-connector/printer-connector
+sudo systemctl start printer-connector
+```
+
+**For K1 Max:**
+```bash
+/etc/init.d/S99printer-connector stop
+mv /opt/printer-connector/printer-connector.backup-* /opt/printer-connector/printer-connector
+/etc/init.d/S99printer-connector start
+```
+
+### Checking Your Current Version
+
+To see what version you're currently running:
+
+```bash
+# For Klipper
+~/printer-connector/printer-connector --version
+
+# For K1 Max
+/opt/printer-connector/printer-connector --version
+```
+
+---
+
+## �🗑️ Uninstallation
 
 To completely remove Printer Connector from your system:
 

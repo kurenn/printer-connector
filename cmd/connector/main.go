@@ -17,14 +17,21 @@ var version = "0.1.0"
 
 func main() {
 	var (
-		cfgPath  string
-		logLevel string
-		once     bool
+		cfgPath     string
+		logLevel    string
+		once        bool
+		showVersion bool
 	)
 	flag.StringVar(&cfgPath, "config", "", "Path to config JSON (required)")
 	flag.StringVar(&logLevel, "log-level", "info", "Log level: debug|info|warn|error")
 	flag.BoolVar(&once, "once", false, "Run one iteration of each loop and exit (debug)")
+	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("printer-connector version %s\n", version)
+		os.Exit(0)
+	}
 
 	if cfgPath == "" {
 		fmt.Fprintln(os.Stderr, "error: --config is required")
