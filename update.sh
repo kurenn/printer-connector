@@ -250,3 +250,4 @@ echo "  1. Stop service"
 echo "  2. mv $BACKUP_FILE $BIN_FILE"
 echo "  3. Start service"
 echo ""
+
