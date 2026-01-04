@@ -173,15 +173,15 @@ info "Downloading latest version..."
 TEMP_BIN="/tmp/printer-connector-update-$$"
 
 if [ "$DOWNLOADER" = "wget" ]; then
-    # BusyBox wget (K1 Max) - no SSL support, use http
-    HTTP_URL=$(echo "$DOWNLOAD_URL" | sed 's|https://github.com|http://github.com|')
-    info "Using HTTP download (K1 Max has limited SSL support)"
-    if ! wget -O "$TEMP_BIN" "$HTTP_URL" 2>/dev/null; then
-        # Try redirector service if GitHub http fails
-        warn "Direct download failed, trying mirror..."
-        HTTP_URL="http://github.com/$GITHUB_REPO/releases/latest/download/$BINARY_NAME"
+    # BusyBox wget (K1 Max) - try HTTPS first (no cert validation), then HTTP
+    info "Downloading from GitHub releases..."
+    if wget --no-check-certificate -O "$TEMP_BIN" "$DOWNLOAD_URL" 2>/dev/null; then
+        success "Downloaded via HTTPS (no cert check)"
+    else
+        warn "HTTPS failed, trying HTTP redirect..."
+        HTTP_URL=$(echo "$DOWNLOAD_URL" | sed 's|https://|http://|')
         if ! wget -O "$TEMP_BIN" "$HTTP_URL" 2>/dev/null; then
-            error "Failed to download from $HTTP_URL"
+            error "Failed to download from $DOWNLOAD_URL. Manual update required: scp printer-connector-mips to /tmp/ and run update script again"
         fi
     fi
 elif [ "$DOWNLOADER" = "curl" ]; then
