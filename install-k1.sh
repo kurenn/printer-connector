@@ -116,11 +116,12 @@ else
     
     DOWNLOAD_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/printer-connector-mips"
     
-    if wget --no-check-certificate -O "$BIN_FILE" "$DOWNLOAD_URL" 2>&1 | grep -v "certificate"; then
+    if wget --no-check-certificate -O "$BIN_FILE" "$DOWNLOAD_URL" 2>/dev/null; then
         # Check if download was successful (file size > 1MB)
-        if [ -f "$BIN_FILE" ] && [ $(wc -c < "$BIN_FILE") -gt 1000000 ]; then
+        if [ -f "$BIN_FILE" ] && [ "$(wc -c < "$BIN_FILE")" -gt 1000000 ]; then
             chmod +x "$BIN_FILE"
-            success "Binary downloaded successfully ($(ls -lh $BIN_FILE | awk '{print $5}'))"
+            FILE_SIZE=$(ls -lh "$BIN_FILE" | awk '{print $5}')
+            success "Binary downloaded successfully ($FILE_SIZE)"
         else
             rm -f "$BIN_FILE"
             error "Download failed: file too small or corrupted"
