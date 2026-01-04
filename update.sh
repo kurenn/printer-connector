@@ -207,20 +207,13 @@ mv "$TEMP_BIN" "$BIN_FILE"
 success "Binary updated"
 
 # Get new version
-NEW_VERSION=$($BIN_FILE --version 2>/dev/null | awk '/version/ {print $3}'
-else
-    mv "$TEMP_BIN" "$BIN_FILE"
-fi
-success "Binary updated"
-
-# Get new version
-NEW_VERSION=$($BIN_FILE --version 2>/dev/null | grep -oP '(?<=version )\S+' || echo "unknown")
+NEW_VERSION=$($BIN_FILE --version 2>/dev/null | awk '/version/ {print $3}')
 info "New version: $NEW_VERSION"
 
 # Start the service
-info "Sta==========================================="
-success "  Update completed successfully!"
-success "===========================================
+info "Starting printer-connector service..."
+if [ "$SERVICE_MANAGER" = "systemd" ]; then
+    sudo systemctl start printer-connector
     sleep 2
     if systemctl is-active --quiet printer-connector; then
         success "Service started successfully"
@@ -235,9 +228,9 @@ fi
 
 # Final status check
 echo ""
-success "═══════════════════════════════════════════════"
+success "==========================================="
 success "  Update completed successfully!"
-success "═══════════════════════════════════════════════"
+success "==========================================="
 echo ""
 info "Summary:"
 echo "  Old version: $CURRENT_VERSION"
