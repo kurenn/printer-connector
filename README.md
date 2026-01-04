@@ -21,6 +21,7 @@
 - [Troubleshooting](#troubleshooting)
 - [Advanced Usage](#advanced-usage)
 - [Development](#development)
+- [API Integration (for Backend Developers)](#api-integration-for-backend-developers)
 - [FAQ](#faq)
 - [License](#license)
 
@@ -674,6 +675,31 @@ printer-connector/
    ```
 5. Commit and push: `git commit -am "Add feature"`
 6. Open a Pull Request
+
+---
+
+## 🔌 API Integration (for Backend Developers)
+
+**Are you building or maintaining the Rails/PrintDock backend?**
+
+The connector communicates with your API using a specific protocol and expects certain endpoints and response formats. We've created comprehensive documentation to help you integrate:
+
+📖 **[API Integration Guide](docs/API_INTEGRATION.md)**
+
+This document includes:
+- Complete API endpoint specifications
+- Request/response payload examples
+- Authentication flow details
+- Command types and parameters
+- Error handling expectations
+- Rails controller code examples
+- Testing and debugging tips
+
+**Quick Links:**
+- [Pairing/Registration](docs/API_INTEGRATION.md#1-pairingregistration)
+- [Command Types](docs/API_INTEGRATION.md#command-types)
+- [File Upload Implementation](docs/API_INTEGRATION.md#5-upload_file)
+- [Rails Controller Skeleton](docs/API_INTEGRATION.md#example-rails-controller-skeleton)
 
 ---
 

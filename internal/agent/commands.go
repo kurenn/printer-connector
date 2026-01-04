@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
 	"printer-connector/internal/cloud"
+	"printer-connector/internal/moonraker"
 )
 
 func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
@@ -49,6 +51,12 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 				result["filename"] = filename
 				execErr = mc.StartPrint(ctx, filename)
 			}
+		case "upload_file":
+			execErr = a.executeUploadFile(ctx, mc, cmd, result)
+		case "delete_file":
+			execErr = a.executeDeleteFile(ctx, mc, cmd, result)
+		case "sync_files":
+			execErr = a.executeSyncFiles(ctx, mc, cmd, result)
 		default:
 			execErr = fmt.Errorf("unsupported action: %s", cmd.Action)
 		}
@@ -77,5 +85,65 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 		})
 	}
 
+	return nil
+}
+
+func (a *Agent) executeUploadFile(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+	filename, _ := cmd.Params["filename"].(string)
+	if filename == "" {
+		return fmt.Errorf("missing params.filename for upload_file")
+	}
+
+	contentBase64, _ := cmd.Params["content"].(string)
+	if contentBase64 == "" {
+		return fmt.Errorf("missing params.content for upload_file")
+	}
+
+	// Decode base64 content
+	content, err := base64.StdEncoding.DecodeString(contentBase64)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64 content: %w", err)
+	}
+
+	result["filename"] = filename
+	result["size"] = len(content)
+
+	// Upload to Moonraker
+	if err := mc.UploadFile(ctx, filename, content); err != nil {
+		return fmt.Errorf("failed to upload file to moonraker: %w", err)
+	}
+
+	a.log.Info("file uploaded", "command_id", cmd.ID, "filename", filename, "size", len(content))
+	return nil
+}
+
+func (a *Agent) executeDeleteFile(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+	filename, _ := cmd.Params["filename"].(string)
+	if filename == "" {
+		return fmt.Errorf("missing params.filename for delete_file")
+	}
+
+	result["filename"] = filename
+
+	// Delete from Moonraker
+	if err := mc.DeleteFile(ctx, filename); err != nil {
+		return fmt.Errorf("failed to delete file from moonraker: %w", err)
+	}
+
+	a.log.Info("file deleted", "command_id", cmd.ID, "filename", filename)
+	return nil
+}
+
+func (a *Agent) executeSyncFiles(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+	// Fetch files list from Moonraker
+	files, err := mc.ListFiles(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list files from moonraker: %w", err)
+	}
+
+	result["files"] = files
+	result["count"] = len(files)
+
+	a.log.Info("files synced", "command_id", cmd.ID, "count", len(files))
 	return nil
 }
