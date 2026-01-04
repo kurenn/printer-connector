@@ -165,7 +165,14 @@ fi
 # Backup current binary
 info "Backing up current binary..."
 BACKUP_FILE="$BIN_FILE.backup-$(date +%Y%m%d-%H%M%S)"
-cp [ "$DOWNLOADER" = "wget" ]; then
+cp "$BIN_FILE" "$BACKUP_FILE"
+success "Backup created: $BACKUP_FILE"
+
+# Download new binary
+info "Downloading latest version..."
+TEMP_BIN="/tmp/printer-connector-update-$$"
+
+if [ "$DOWNLOADER" = "wget" ]; then
     # BusyBox wget (K1 Max) - no SSL support, use http
     HTTP_URL=$(echo "$DOWNLOAD_URL" | sed 's|https://github.com|http://github.com|')
     info "Using HTTP download (K1 Max has limited SSL support)"
