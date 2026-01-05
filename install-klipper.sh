@@ -14,7 +14,7 @@ CONFIG_FILE="$INSTALL_DIR/config.json"
 BIN_FILE="$INSTALL_DIR/printer-connector"
 STATE_DIR="$INSTALL_DIR/state"
 GITHUB_REPO="kurenn/printer-connector"
-CLOUD_URL="http://localhost:3000"
+CLOUD_URL="http://192.168.68.50:3000"
 MOONRAKER_URL="http://127.0.0.1:7125"
 
 # Colors for output

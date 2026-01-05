@@ -114,7 +114,7 @@ chmod +x /opt/printer-connector/printer-connector
 
 ## Default Settings
 
-- **Cloud URL**: `http://localhost:3000`
+- **Cloud URL**: `http://192.168.68.50:3000`
 - **Moonraker**: `http://127.0.0.1:7125`
 - **Poll commands**: Every 5 seconds
 - **Push snapshots**: Every 30 seconds
