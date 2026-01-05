@@ -54,7 +54,7 @@ type HeartbeatPrinter struct {
 }
 
 type Command struct {
-	ID        string         `json:"id"`
+	ID        StringOrNumber `json:"id"`
 	PrinterID int            `json:"printer_id"`
 	Action    string         `json:"action"`
 	Params    map[string]any `json:"params"`

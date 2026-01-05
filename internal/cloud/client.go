@@ -81,8 +81,8 @@ func (c *Client) GetCommands(ctx context.Context, connectorID string, limit int)
 	return out, nil
 }
 
-func (c *Client) CompleteCommand(ctx context.Context, commandID string, req CommandCompleteRequest) error {
-	path := fmt.Sprintf("/api/v1/commands/%s/complete", url.PathEscape(commandID))
+func (c *Client) CompleteCommand(ctx context.Context, commandID StringOrNumber, req CommandCompleteRequest) error {
+	path := fmt.Sprintf("/api/v1/commands/%s/complete", url.PathEscape(commandID.String()))
 	return c.doJSON(ctx, http.MethodPost, path, c.authHeaders(), req, nil)
 }
 

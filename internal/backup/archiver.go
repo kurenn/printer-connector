@@ -80,7 +80,7 @@ func Create(opts Options) (*Result, error) {
 	gzWriter := gzip.NewWriter(multiWriter)
 	defer gzWriter.Close()
 
-	// Create tar writer
+	// Create tar writer with PAX format (supports long filenames)
 	tarWriter := tar.NewWriter(gzWriter)
 	defer tarWriter.Close()
 
@@ -107,8 +107,23 @@ func Create(opts Options) (*Result, error) {
 				return fmt.Errorf("path outside printer_data root: %s", path)
 			}
 
+			// Skip Helper-Script directory
+			if info.IsDir() && info.Name() == "Helper-Script" {
+				return filepath.SkipDir
+			}
+
 			// Skip directories (we only archive files)
 			if info.IsDir() {
+				return nil
+			}
+
+			// Only include .cfg files
+			if !strings.HasSuffix(info.Name(), ".cfg") {
+				return nil
+			}
+
+			// Skip printer-*_*.cfg files (but keep printer.cfg)
+			if strings.HasPrefix(info.Name(), "printer-") && strings.Contains(info.Name(), "_") && info.Name() != "printer.cfg" {
 				return nil
 			}
 
@@ -122,13 +137,20 @@ func Create(opts Options) (*Result, error) {
 			if err != nil {
 				return fmt.Errorf("failed to calculate relative path: %w", err)
 			}
+			// Use forward slashes for tar archives (Unix convention)
+			relPath = filepath.ToSlash(relPath)
 
-			// Create tar header
+			// Create tar header with PAX format for long filenames
 			header, err := tar.FileInfoHeader(info, "")
 			if err != nil {
 				return fmt.Errorf("failed to create tar header: %w", err)
 			}
 			header.Name = relPath
+			header.Format = tar.FormatPAX // Use PAX format to support long filenames
+			
+			// Clear potentially long fields that might cause issues
+			header.Uname = ""
+			header.Gname = ""
 
 			// Write header
 			if err := tarWriter.WriteHeader(header); err != nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"printer-connector/internal/backup"
@@ -165,10 +166,23 @@ func (a *Agent) executeCreateBackup(ctx context.Context, cmd cloud.Command, resu
 		return fmt.Errorf("missing params.presigned_url")
 	}
 
-	// Get printer_data root (default: ~/printer_data)
-	printerDataRoot := os.Getenv("HOME") + "/printer_data"
+	// Get printer_data root (default: /usr/data/printer_data for K1, ~/printer_data for others)
+	printerDataRoot := "/usr/data/printer_data"
+	if home := os.Getenv("HOME"); home != "" && home != "/root" {
+		printerDataRoot = home + "/printer_data"
+	}
 	if override, ok := cmd.Params["printer_data_root"].(string); ok && override != "" {
 		printerDataRoot = override
+		// Expand tilde if present - use K1 path for root user, otherwise HOME
+		if strings.HasPrefix(printerDataRoot, "~/") {
+			home := os.Getenv("HOME")
+			if home == "/root" {
+				// K1 Max: use /usr/data/printer_data even if ~/printer_data is specified
+				printerDataRoot = filepath.Join("/usr/data", printerDataRoot[2:])
+			} else if home != "" {
+				printerDataRoot = filepath.Join(home, printerDataRoot[2:])
+			}
+		}
 	}
 
 	// Parse include options (default all to false)
