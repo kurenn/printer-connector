@@ -148,9 +148,11 @@ func Create(opts Options) (*Result, error) {
 			header.Name = relPath
 			header.Format = tar.FormatPAX // Use PAX format to support long filenames
 			
-			// Clear potentially long fields that might cause issues
+			// Clear potentially long fields that might cause issues with tar headers
 			header.Uname = ""
 			header.Gname = ""
+			header.Uid = 0
+			header.Gid = 0
 
 			// Write header
 			if err := tarWriter.WriteHeader(header); err != nil {
