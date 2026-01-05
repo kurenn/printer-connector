@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -151,5 +152,56 @@ func (c *Client) doJSON(ctx context.Context, method, path string, headers map[st
 	if err := json.Unmarshal(respB, out); err != nil {
 		return fmt.Errorf("cloud: invalid json: %w", err)
 	}
+	return nil
+}
+
+// UploadBackup uploads a backup archive file to a presigned URL via HTTP PUT.
+// This is used for direct upload to cloud storage (S3, GCS, etc).
+func (c *Client) UploadBackup(ctx context.Context, presignedURL, filePath string) error {
+	// Open backup file
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open backup file: %w", err)
+	}
+	defer file.Close()
+
+	// Get file size for Content-Length
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat backup file: %w", err)
+	}
+
+	// Create PUT request with file as body
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, presignedURL, file)
+	if err != nil {
+		return fmt.Errorf("failed to create upload request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/gzip")
+	req.ContentLength = fileInfo.Size()
+
+	// Execute upload
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("upload request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body for error details
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respBody))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, msg)
+	}
+
+	c.logger.Info("backup uploaded successfully",
+		"size_bytes", fileInfo.Size(),
+		"status", resp.StatusCode,
+	)
+
 	return nil
 }

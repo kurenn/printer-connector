@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	"printer-connector/internal/backup"
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/moonraker"
 )
@@ -57,6 +60,8 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 			execErr = a.executeDeleteFile(ctx, mc, cmd, result)
 		case "sync_files":
 			execErr = a.executeSyncFiles(ctx, mc, cmd, result)
+		case "create_backup":
+			execErr = a.executeCreateBackup(ctx, cmd, result)
 		default:
 			execErr = fmt.Errorf("unsupported action: %s", cmd.Action)
 		}
@@ -145,5 +150,97 @@ func (a *Agent) executeSyncFiles(ctx context.Context, mc *moonraker.Client, cmd 
 	result["count"] = len(files)
 
 	a.log.Info("files synced", "command_id", cmd.ID, "count", len(files))
+	return nil
+}
+
+func (a *Agent) executeCreateBackup(ctx context.Context, cmd cloud.Command, result map[string]any) error {
+	// Extract and validate params
+	backupID, _ := cmd.Params["backup_id"].(string)
+	if backupID == "" {
+		return fmt.Errorf("missing params.backup_id")
+	}
+
+	presignedURL, _ := cmd.Params["presigned_url"].(string)
+	if presignedURL == "" {
+		return fmt.Errorf("missing params.presigned_url")
+	}
+
+	// Get printer_data root (default: ~/printer_data)
+	printerDataRoot := os.Getenv("HOME") + "/printer_data"
+	if override, ok := cmd.Params["printer_data_root"].(string); ok && override != "" {
+		printerDataRoot = override
+	}
+
+	// Parse include options (default all to false)
+	includeMap, _ := cmd.Params["include"].(map[string]any)
+	includeConfig, _ := includeMap["config"].(bool)
+	includeDatabase, _ := includeMap["database"].(bool)
+	includeGcodes, _ := includeMap["gcodes"].(bool)
+	includeLogs, _ := includeMap["logs"].(bool)
+
+	// Ensure at least one directory is included
+	if !includeConfig && !includeDatabase && !includeGcodes && !includeLogs {
+		return fmt.Errorf("no directories selected for backup")
+	}
+
+	// Create output path in state directory
+	outputPath := filepath.Join(a.cfg.StateDir, backupID+".tar.gz")
+
+	// Ensure state directory exists
+	if err := os.MkdirAll(a.cfg.StateDir, 0755); err != nil {
+		return fmt.Errorf("failed to create state directory: %w", err)
+	}
+
+	a.log.Info("creating backup",
+		"backup_id", backupID,
+		"printer_data_root", printerDataRoot,
+		"include_config", includeConfig,
+		"include_database", includeDatabase,
+		"include_gcodes", includeGcodes,
+		"include_logs", includeLogs,
+	)
+
+	// Create backup archive
+	opts := backup.Options{
+		PrinterDataRoot: printerDataRoot,
+		IncludeConfig:   includeConfig,
+		IncludeDatabase: includeDatabase,
+		IncludeGcodes:   includeGcodes,
+		IncludeLogs:     includeLogs,
+		OutputPath:      outputPath,
+		MaxSizeBytes:    10 << 30, // 10GB limit
+	}
+
+	backupResult, err := backup.Create(opts)
+	if err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
+
+	// Always cleanup temp archive after upload (or failure)
+	defer func() {
+		if err := os.Remove(backupResult.ArchivePath); err != nil {
+			a.log.Warn("failed to cleanup backup archive", "path", backupResult.ArchivePath, "error", err)
+		}
+	}()
+
+	a.log.Info("backup archive created",
+		"backup_id", backupID,
+		"size_bytes", backupResult.SizeBytes,
+		"sha256", backupResult.SHA256,
+	)
+
+	// Upload to presigned URL
+	if err := a.cloud.UploadBackup(ctx, presignedURL, backupResult.ArchivePath); err != nil {
+		return fmt.Errorf("failed to upload backup: %w", err)
+	}
+
+	a.log.Info("backup uploaded successfully", "backup_id", backupID)
+
+	// Populate result
+	result["backup_id"] = backupID
+	result["size_bytes"] = backupResult.SizeBytes
+	result["sha256"] = backupResult.SHA256
+	result["uploaded_at"] = time.Now().UTC().Format(time.RFC3339)
+
 	return nil
 }
