@@ -114,7 +114,7 @@ chmod +x /opt/printer-connector/printer-connector
 
 ## Default Settings
 
-- **Cloud URL**: `https://e75e93c7cdb6.ngrok-free.app`
+- **Cloud URL**: `https://4765bc19f72a.ngrok-free.app`
 - **Moonraker**: `http://127.0.0.1:7125`
 - **Poll commands**: Every 5 seconds
 - **Push snapshots**: Every 30 seconds
