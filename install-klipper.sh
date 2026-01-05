@@ -14,7 +14,7 @@ CONFIG_FILE="$INSTALL_DIR/config.json"
 BIN_FILE="$INSTALL_DIR/printer-connector"
 STATE_DIR="$INSTALL_DIR/state"
 GITHUB_REPO="kurenn/printer-connector"
-CLOUD_URL="https://4765bc19f72a.ngrok-free.app"
+CLOUD_URL="http://localhost:3000"
 MOONRAKER_URL="http://127.0.0.1:7125"
 
 # Colors for output
