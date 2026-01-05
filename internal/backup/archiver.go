@@ -140,19 +140,14 @@ func Create(opts Options) (*Result, error) {
 			// Use forward slashes for tar archives (Unix convention)
 			relPath = filepath.ToSlash(relPath)
 
-			// Create tar header with PAX format for long filenames
-			header, err := tar.FileInfoHeader(info, "")
-			if err != nil {
-				return fmt.Errorf("failed to create tar header: %w", err)
+			// Create minimal tar header to avoid "write too long" errors
+			header := &tar.Header{
+				Name:    relPath,
+				Size:    info.Size(),
+				Mode:    int64(info.Mode()),
+				ModTime: info.ModTime(),
+				Format:  tar.FormatPAX,
 			}
-			header.Name = relPath
-			header.Format = tar.FormatPAX // Use PAX format to support long filenames
-			
-			// Clear potentially long fields that might cause issues with tar headers
-			header.Uname = ""
-			header.Gname = ""
-			header.Uid = 0
-			header.Gid = 0
 
 			// Write header
 			if err := tarWriter.WriteHeader(header); err != nil {
