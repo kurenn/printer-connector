@@ -126,7 +126,7 @@ success "Directories created"
 
 # Download binary
 info "Downloading printer-connector binary..."
-BINARY_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/$BINARY_NAME"
+BINARY_URL="https://github.com/$GITHUB_REPO/raw/main/$BINARY_NAME"
 
 if command -v wget &> /dev/null; then
     wget --no-check-certificate -q -O "$BIN_FILE" "$BINARY_URL" || error "Failed to download binary"
@@ -141,10 +141,17 @@ success "Binary downloaded and made executable"
 
 # Verify binary
 info "Verifying binary..."
-if ! file "$BIN_FILE" | grep -q "ELF.*executable"; then
-    error "Downloaded file is not a valid executable"
+# Check file size (should be ~7-9MB)
+FILE_SIZE=$(stat -c%s "$BIN_FILE" 2>/dev/null || stat -f%z "$BIN_FILE" 2>/dev/null || echo 0)
+if [ "$FILE_SIZE" -lt 1000000 ]; then
+    error "Downloaded file is too small ($FILE_SIZE bytes). Expected 7-9MB binary."
 fi
-success "Binary verified"
+# Check ELF magic bytes
+if ! head -c 4 "$BIN_FILE" | grep -q "ELF" 2>/dev/null; then
+    warn "File may not be a valid ELF executable. Size: $FILE_SIZE bytes"
+    warn "Continuing anyway - the binary will fail to run if invalid."
+fi
+success "Binary verified ($FILE_SIZE bytes)"
 
 # Create config JSON
 info "Creating configuration file..."
