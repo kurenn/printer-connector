@@ -140,13 +140,14 @@ func Create(opts Options) (*Result, error) {
 			// Use forward slashes for tar archives (Unix convention)
 			relPath = filepath.ToSlash(relPath)
 
-			// Create minimal tar header to avoid "write too long" errors
+			// Create minimal tar header - use GNU format which is more lenient
 			header := &tar.Header{
-				Name:    relPath,
-				Size:    info.Size(),
-				Mode:    int64(info.Mode().Perm()), // Only permission bits, not file type bits
-				ModTime: info.ModTime(),
-				Format:  tar.FormatPAX,
+				Typeflag: tar.TypeReg,
+				Name:     relPath,
+				Size:     info.Size(),
+				Mode:     0644, // Simple fixed permissions
+				ModTime:  info.ModTime(),
+				Format:   tar.FormatGNU, // GNU format is more permissive than PAX
 			}
 
 			// Write header
