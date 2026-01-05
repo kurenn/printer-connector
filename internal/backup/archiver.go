@@ -144,7 +144,7 @@ func Create(opts Options) (*Result, error) {
 			header := &tar.Header{
 				Name:    relPath,
 				Size:    info.Size(),
-				Mode:    int64(info.Mode()),
+				Mode:    int64(info.Mode().Perm()), // Only permission bits, not file type bits
 				ModTime: info.ModTime(),
 				Format:  tar.FormatPAX,
 			}
