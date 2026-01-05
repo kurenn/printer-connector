@@ -160,9 +160,10 @@ func Create(opts Options) (*Result, error) {
 			if err != nil {
 				return fmt.Errorf("failed to open file %s: %w", path, err)
 			}
-			defer file.Close()
 
 			written, err := io.Copy(tarWriter, file)
+			file.Close() // Close immediately after copying
+			
 			if err != nil {
 				return fmt.Errorf("failed to write file %s to archive: %w", path, err)
 			}
