@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// DefaultCloudURL is the production cloud URL used when no override is provided
+const DefaultCloudURL = "https://www.spoolr.io"
+
 type MoonrakerPrinter struct {
 	PrinterID int    `json:"printer_id"`
 	Name      string `json:"name"`
@@ -41,6 +44,16 @@ func Load(path string) (*Config, error) {
 	var c Config
 	if err := json.Unmarshal(b, &c); err != nil {
 		return nil, err
+	}
+
+	// Override cloud_url with environment variable if set
+	if envURL := os.Getenv("CLOUD_URL"); envURL != "" {
+		c.CloudURL = envURL
+	}
+
+	// Use default production URL if still empty
+	if c.CloudURL == "" {
+		c.CloudURL = DefaultCloudURL
 	}
 
 	if c.PollCommandsSeconds <= 0 {

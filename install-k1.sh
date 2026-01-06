@@ -15,8 +15,10 @@ CONFIG_FILE="$INSTALL_DIR/config.json"
 BIN_FILE="$INSTALL_DIR/printer-connector"
 STATE_DIR="$INSTALL_DIR/state"
 GITHUB_REPO="kurenn/printer-connector"
-CLOUD_URL="http://192.168.68.50:3000"
 MOONRAKER_URL="http://127.0.0.1:7125"
+
+# Cloud URL: defaults to production, can be overridden with CLOUD_URL env var
+CLOUD_URL="${CLOUD_URL:-https://www.spoolr.io}"
 
 # Check if binary was manually transferred to /tmp
 MANUAL_BIN="/tmp/printer-connector"
@@ -140,10 +142,9 @@ fi
 echo ""
 info "Step 4: Generating configuration"
 
-# Create config JSON
+# Create config JSON (cloud_url will use default or CLOUD_URL env var)
 cat > "$CONFIG_FILE" <<EOF
 {
-  "cloud_url": "$CLOUD_URL",
   "pairing_token": "$PAIRING_TOKEN",
   "poll_commands_seconds": 5,
   "push_snapshots_seconds": 30,

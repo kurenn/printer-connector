@@ -726,6 +726,31 @@ go test ./...
 
 # Run with dev config
 ./printer-connector --config config/config.dev.json --log-level debug
+
+# Or set CLOUD_URL environment variable for local development
+export CLOUD_URL=http://localhost:3000
+./printer-connector --config config/config.dev.json --log-level debug
+```
+
+### Environment Variables
+
+The connector supports the following environment variables:
+
+- **`CLOUD_URL`**: Override the cloud API URL
+  - Default: `https://www.spoolr.io` (production)
+  - Development: `export CLOUD_URL=http://localhost:3000` or `http://192.168.68.50:3000`
+  - Takes precedence over config file `cloud_url` field
+
+Example for local Rails development:
+```bash
+export CLOUD_URL=http://localhost:3000
+./printer-connector --config config/config.dev.json --log-level debug
+```
+
+For systemd services, add to the service file:
+```ini
+[Service]
+Environment="CLOUD_URL=http://192.168.68.50:3000"
 ```
 
 ### Project Structure

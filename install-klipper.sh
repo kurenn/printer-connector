@@ -14,8 +14,10 @@ CONFIG_FILE="$INSTALL_DIR/config.json"
 BIN_FILE="$INSTALL_DIR/printer-connector"
 STATE_DIR="$INSTALL_DIR/state"
 GITHUB_REPO="kurenn/printer-connector"
-CLOUD_URL="http://192.168.68.50:3000"
 MOONRAKER_URL="http://127.0.0.1:7125"
+
+# Cloud URL: defaults to production, can be overridden with CLOUD_URL env var
+CLOUD_URL="${CLOUD_URL:-https://www.spoolr.io}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -153,11 +155,10 @@ if ! head -c 4 "$BIN_FILE" | grep -q "ELF" 2>/dev/null; then
 fi
 success "Binary verified ($FILE_SIZE bytes)"
 
-# Create config JSON
+# Create config JSON (cloud_url will use default or CLOUD_URL env var)
 info "Creating configuration file..."
 cat > "$CONFIG_FILE" <<EOF
 {
-  "cloud_url": "$CLOUD_URL",
   "pairing_token": "$PAIRING_TOKEN",
   "poll_commands_seconds": 5,
   "push_snapshots_seconds": 30,
@@ -257,6 +258,8 @@ WorkingDirectory=$INSTALL_DIR
 ExecStart=$BIN_FILE --config $CONFIG_FILE --log-level info
 Restart=always
 RestartSec=10
+# For development, uncomment and set your local URL:
+# Environment="CLOUD_URL=http://192.168.68.50:3000"
 
 [Install]
 WantedBy=multi-user.target
