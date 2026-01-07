@@ -60,11 +60,11 @@ info "Detected architecture: $ARCH"
 
 case "$ARCH" in
     aarch64|arm64)
-        BINARY_NAME="printer-connector"
+        BINARY_NAME="printer-connector-arm64"
         ;;
     x86_64|amd64)
-        warn "x86_64 detected - using ARM64 binary (may not work on x86)"
-        BINARY_NAME="printer-connector"
+        warn "x86_64 detected - ARM64 binary may not work, consider manual installation"
+        BINARY_NAME="printer-connector-arm64"
         ;;
     *)
         error "Unsupported architecture: $ARCH"
