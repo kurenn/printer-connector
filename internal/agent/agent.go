@@ -49,7 +49,7 @@ func New(opts Options) *Agent {
 
 	moons := map[int]*moonraker.Client{}
 	for _, p := range opts.Config.Moonraker {
-		moons[p.PrinterID] = moonraker.New(p.BaseURL)
+		moons[p.PrinterID] = moonraker.New(p.BaseURL, p.UIPort)
 	}
 
 	return &Agent{

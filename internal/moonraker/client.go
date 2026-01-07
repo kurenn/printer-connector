@@ -16,17 +16,43 @@ import (
 
 type Client struct {
 	baseURL    string
+	uiBaseURL  string
 	httpClient *http.Client
 }
 
-func New(baseURL string) *Client {
+func New(baseURL string, uiPort int) *Client {
 	transport := &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
 		ResponseHeaderTimeout: 5 * time.Second,
 		IdleConnTimeout:       30 * time.Second,
 	}
+
+	// Default to port 80 if not specified (vanilla Klipper default)
+	if uiPort == 0 {
+		uiPort = 80
+	}
+
+	// Build UI base URL from the Moonraker base URL
+	// Replace the port from baseURL with uiPort for webcam access
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		// Fallback: just use baseURL for both
+		return &Client{
+			baseURL:   strings.TrimRight(baseURL, "/"),
+			uiBaseURL: strings.TrimRight(baseURL, "/"),
+			httpClient: &http.Client{
+				Timeout:   5 * time.Second,
+				Transport: transport,
+			},
+		}
+	}
+
+	// Build UI URL with the specified UI port
+	uiBaseURL := fmt.Sprintf("%s://%s:%d", parsedURL.Scheme, parsedURL.Hostname(), uiPort)
+
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		uiBaseURL: strings.TrimRight(uiBaseURL, "/"),
 		httpClient: &http.Client{
 			Timeout:   5 * time.Second,
 			Transport: transport,
@@ -269,7 +295,7 @@ func (c *Client) GetWebcamSnapshot(ctx context.Context) ([]byte, string, error) 
 
 	var lastErr error
 	for _, endpoint := range endpoints {
-		u := c.baseURL + endpoint
+		u := c.uiBaseURL + endpoint
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
 			lastErr = err
