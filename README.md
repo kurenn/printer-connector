@@ -145,14 +145,14 @@ Choose the installation method for your printer type:
 Run this **one command** on your Raspberry Pi:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh | sudo bash
+wget -qO- https://raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh | sudo bash
 ```
 
 Or download and run manually:
 
 ```bash
 # Download the installer
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh -o install-klipper.sh
+wget https://raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh
 
 # Make it executable
 chmod +x install-klipper.sh
@@ -171,14 +171,14 @@ The installer will ask you for:
 Run this **one command** on your K1:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh | sudo sh
+wget -qO- https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh | sh
 ```
 
 Or download and run manually:
 
 ```bash
 # Download the K1 installer
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh -o install-k1.sh
+wget https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh
 
 # Make it executable
 chmod +x install-k1.sh
@@ -260,7 +260,7 @@ To update Printer Connector to the latest version, use the update script:
 Run this **one command** on your printer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/update.sh | bash
+wget -qO- https://raw.githubusercontent.com/kurenn/printer-connector/main/update.sh | bash
 ```
 
 Or download and run manually:
@@ -355,7 +355,7 @@ To completely remove Printer Connector from your system:
 
 ```bash
 # Download the uninstaller
-curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/uninstall.sh -o uninstall.sh
+wget https://raw.githubusercontent.com/kurenn/printer-connector/main/uninstall.sh
 
 # Make it executable
 chmod +x uninstall.sh

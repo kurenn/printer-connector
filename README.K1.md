@@ -18,7 +18,7 @@ wget -O - https://raw.githubusercontent.com/kurenn/printer-connector/main/instal
 
 1. **On your computer**, download the script:
    ```bash
-   curl -O https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh
+   wget https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh
    ```
 
 2. **Copy to K1 Max**:
