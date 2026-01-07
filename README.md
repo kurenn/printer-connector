@@ -584,8 +584,9 @@ go build -o printer-connector ./cmd/connector
 # For Raspberry Pi (from another machine)
 GOOS=linux GOARCH=arm64 go build -o printer-connector-arm64 ./cmd/connector
 
-# For K1 Max (MIPS)
-GOOS=linux GOARCH=mips go build -o printer-connector-mips ./cmd/connector
+# For K1 Max (MIPS little-endian):
+# Use Docker for consistent cross-compilation:
+docker run --rm -v "$PWD":/src -w /src golang:1.23-alpine sh -c "GOOS=linux GOARCH=mipsle go build -ldflags='-s -w' -o printer-connector-mips ./cmd/connector"
 ```
 
 #### 2. Create Config Manually
@@ -793,7 +794,8 @@ printer-connector/
 4. Build for target platforms:
    ```bash
    GOOS=linux GOARCH=arm64 go build -o dist/printer-connector-arm64 ./cmd/connector
-   GOOS=linux GOARCH=mips go build -o dist/printer-connector-mips ./cmd/connector
+   # K1 Max requires MIPS little-endian with Docker for proper cross-compilation
+   docker run --rm -v "$PWD":/src -w /src golang:1.23-alpine sh -c "GOOS=linux GOARCH=mipsle go build -ldflags='-s -w' -o dist/printer-connector-mips ./cmd/connector"
    ```
 5. Commit and push: `git commit -am "Add feature"`
 6. Open a Pull Request

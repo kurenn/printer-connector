@@ -154,7 +154,7 @@ cat > "$CONFIG_FILE" <<EOF
       "printer_id": 0,
       "name": "$PRINTER_NAME",
       "base_url": "$MOONRAKER_URL",
-      "ui_port": 4409
+      "ui_port": 4408
     }
   ]
 }

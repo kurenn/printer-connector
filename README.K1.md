@@ -36,12 +36,12 @@ wget -O - https://raw.githubusercontent.com/kurenn/printer-connector/main/instal
 
 ## What the installer does:
 
-1. ✅ Checks architecture (MIPS)
+1. ✅ Checks architecture (MIPS little-endian)
 2. ✅ Asks for pairing token (from Rails app)
 3. ✅ Asks for printer name
-4. ✅ Downloads `printer-connector-mips` binary from GitHub
+4. ✅ Downloads `printer-connector-mips` binary from GitHub (MIPSLE build)
 5. ✅ Creates `/opt/printer-connector/` directory
-6. ✅ Generates `config.json` with correct settings
+6. ✅ Generates `config.json` with correct settings (ui_port: 4408 for webcam)
 7. ✅ Tests Moonraker connection
 8. ✅ Performs pairing with cloud (exchanges token for credentials)
 9. ✅ Auto-updates `printer_id` in config

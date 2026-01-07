@@ -16,17 +16,43 @@ import (
 
 type Client struct {
 	baseURL    string
+	uiBaseURL  string
 	httpClient *http.Client
 }
 
-func New(baseURL string) *Client {
+func New(baseURL string, uiPort int) *Client {
 	transport := &http.Transport{
 		DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
 		ResponseHeaderTimeout: 5 * time.Second,
 		IdleConnTimeout:       30 * time.Second,
 	}
+
+	// Default to port 80 if not specified (vanilla Klipper default)
+	if uiPort == 0 {
+		uiPort = 80
+	}
+
+	// Build UI base URL from the Moonraker base URL
+	// Replace the port from baseURL with uiPort for webcam access
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		// Fallback: just use baseURL for both
+		return &Client{
+			baseURL:   strings.TrimRight(baseURL, "/"),
+			uiBaseURL: strings.TrimRight(baseURL, "/"),
+			httpClient: &http.Client{
+				Timeout:   5 * time.Second,
+				Transport: transport,
+			},
+		}
+	}
+
+	// Build UI URL with the specified UI port
+	uiBaseURL := fmt.Sprintf("%s://%s:%d", parsedURL.Scheme, parsedURL.Hostname(), uiPort)
+
 	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		uiBaseURL: strings.TrimRight(uiBaseURL, "/"),
 		httpClient: &http.Client{
 			Timeout:   5 * time.Second,
 			Transport: transport,
@@ -255,4 +281,67 @@ func (c *Client) ListFiles(ctx context.Context) ([]map[string]any, error) {
 	}
 
 	return response.Result, nil
+}
+
+// GetWebcamSnapshot retrieves a webcam snapshot from Moonraker
+// Returns the image bytes and content type, or an error
+func (c *Client) GetWebcamSnapshot(ctx context.Context) ([]byte, string, error) {
+	// Try the most common webcam endpoints
+	endpoints := []string{
+		"/webcam/?action=snapshot",
+		"/webcam/snapshot",
+		"/server/webcam/snapshot",
+	}
+
+	var lastErr error
+	for _, endpoint := range endpoints {
+		u := c.uiBaseURL + endpoint
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		defer resp.Body.Close()
+
+		// Success - return the image
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			// Limit to 10MB for safety
+			imageData, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+			if err != nil {
+				return nil, "", fmt.Errorf("failed to read snapshot: %w", err)
+			}
+
+			contentType := resp.Header.Get("Content-Type")
+			if contentType == "" {
+				contentType = "image/jpeg" // Default assumption
+			}
+
+			return imageData, contentType, nil
+		}
+
+		// 404 means try next endpoint
+		if resp.StatusCode == 404 {
+			continue
+		}
+
+		// Other error - read response and return
+		respB, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		msg := strings.TrimSpace(string(respB))
+		if msg == "" {
+			msg = resp.Status
+		}
+		lastErr = fmt.Errorf("moonraker http %d: %s", resp.StatusCode, msg)
+	}
+
+	if lastErr != nil {
+		return nil, "", fmt.Errorf("failed to fetch webcam snapshot: %w", lastErr)
+	}
+
+	return nil, "", fmt.Errorf("no working webcam endpoint found")
 }

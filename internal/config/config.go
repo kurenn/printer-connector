@@ -69,6 +69,13 @@ func Load(path string) (*Config, error) {
 		c.StateDir = "/var/lib/printer-connector"
 	}
 
+	// Set default ui_port if not specified (vanilla Klipper usually uses port 80)
+	for i := range c.Moonraker {
+		if c.Moonraker[i].UIPort == 0 {
+			c.Moonraker[i].UIPort = 80
+		}
+	}
+
 	return &c, nil
 }
 
