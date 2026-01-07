@@ -81,13 +81,15 @@ func (a *Agent) Run(ctx context.Context) error {
 		_ = a.sendHeartbeat(ctx)
 		_ = a.pollAndExecuteCommands(ctx)
 		_ = a.collectAndPushSnapshots(ctx)
+		_ = a.processWebcamRequests(ctx)
 		return nil
 	}
 
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 4)
 	go func() { errCh <- a.heartbeatLoop(ctx) }()
 	go func() { errCh <- a.commandsLoop(ctx) }()
 	go func() { errCh <- a.snapshotsLoop(ctx) }()
+	go func() { errCh <- a.webcamLoop(ctx) }()
 
 	select {
 	case <-ctx.Done():
@@ -253,6 +255,94 @@ func (a *Agent) snapshotsLoop(ctx context.Context) error {
 		case <-tick.C:
 		}
 	}
+}
+
+func (a *Agent) webcamLoop(ctx context.Context) error {
+	// Poll webcam requests every 2 seconds (more frequent than snapshots for responsiveness)
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+
+	bo := util.NewBackoff(1*time.Second, 60*time.Second)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := a.processWebcamRequests(ctx); err != nil {
+			a.log.Warn("webcam requests processing failed", "error", err)
+			time.Sleep(bo.Next())
+		} else {
+			bo.Reset()
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+		}
+	}
+}
+
+func (a *Agent) processWebcamRequests(ctx context.Context) error {
+	// Fetch pending webcam requests
+	requests, err := a.cloud.GetWebcamRequests(ctx, 10)
+	if err != nil {
+		return err
+	}
+
+	if len(requests) == 0 {
+		return nil
+	}
+
+	a.log.Debug("processing webcam requests", "count", len(requests))
+
+	// Process each request
+	for _, req := range requests {
+		if err := a.handleWebcamRequest(ctx, req); err != nil {
+			a.log.Error("failed to process webcam request",
+				"request_id", req.ID.String(),
+				"printer_id", req.PrinterID,
+				"error", err,
+			)
+			// Continue processing other requests even if one fails
+		}
+	}
+
+	return nil
+}
+
+func (a *Agent) handleWebcamRequest(ctx context.Context, req cloud.WebcamRequest) error {
+	// Find the moonraker client for this printer
+	moon, ok := a.moons[req.PrinterID]
+	if !ok {
+		return a.cloud.UploadWebcamSnapshot(ctx, req.ID, req.PrinterID, nil, "application/json")
+	}
+
+	// Fetch snapshot from Moonraker
+	imageData, contentType, err := moon.GetWebcamSnapshot(ctx)
+	if err != nil {
+		a.log.Warn("failed to fetch webcam snapshot from moonraker",
+			"printer_id", req.PrinterID,
+			"error", err,
+		)
+		return err
+	}
+
+	// Upload to Rails
+	if err := a.cloud.UploadWebcamSnapshot(ctx, req.ID, req.PrinterID, imageData, contentType); err != nil {
+		return err
+	}
+
+	a.log.Info("webcam snapshot uploaded",
+		"request_id", req.ID.String(),
+		"printer_id", req.PrinterID,
+		"size_bytes", len(imageData),
+	)
+
+	return nil
 }
 
 // getLocalIP returns the non-loopback local IP address of the machine
