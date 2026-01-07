@@ -79,3 +79,10 @@ type Snapshot struct {
 type SnapshotsBatchResponse struct {
 	Inserted int `json:"inserted"`
 }
+
+// WebcamRequest represents a pending webcam snapshot request from Rails
+type WebcamRequest struct {
+	ID        StringOrNumber `json:"id"`
+	PrinterID int            `json:"printer_id"`
+	CreatedAt string         `json:"created_at,omitempty"`
+}

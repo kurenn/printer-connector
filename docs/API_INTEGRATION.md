@@ -17,6 +17,7 @@
   - [3. Commands Polling](#3-commands-polling)
   - [4. Command Completion](#4-command-completion)
   - [5. Snapshots Push](#5-snapshots-push)
+  - [6. Webcam Snapshot Proxy](#6-webcam-snapshot-proxy)
 - [Command Types](#command-types)
 - [Error Handling](#error-handling)
 - [Testing & Debugging](#testing--debugging)
@@ -680,6 +681,168 @@ Content-Type: application/json
   - Temperatures
   - ETA calculation
 - Use for real-time updates via WebSockets/ActionCable
+
+---
+
+### 6. Webcam Snapshot Proxy
+
+**Purpose:** Allow Rails to fetch webcam snapshots from printers on private networks through the connector proxy.
+
+#### Why This Is Needed
+
+Printers are typically on private home networks and cannot be accessed directly from the Rails server. The connector acts as a proxy, fetching snapshots from Moonraker's webcam endpoint and forwarding them to Rails.
+
+#### Flow
+
+1. Rails creates a `webcam_request` record with status `pending`
+2. Connector polls `/api/v1/connectors/:id/webcam_requests` every 2 seconds
+3. Connector fetches snapshot from Moonraker
+4. Connector uploads image to Rails via `PUT /api/v1/webcam_requests/:id/upload`
+5. Rails updates request status to `completed` and stores/displays image
+
+#### Get Webcam Requests
+
+```http
+GET /api/v1/connectors/:id/webcam_requests?limit=10
+Authorization: Bearer {connector_secret}
+X-Connector-Id: {connector_id}
+```
+
+**Response:**
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+[
+  {
+    "id": 123,
+    "printer_id": 456,
+    "created_at": "2025-01-06T10:30:00Z"
+  }
+]
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | int/string | Webcam request ID |
+| `printer_id` | int | Printer ID to fetch snapshot from |
+| `created_at` | string | ISO 8601 timestamp when request was created |
+
+#### Upload Webcam Snapshot
+
+```http
+PUT /api/v1/webcam_requests/:id/upload
+Authorization: Bearer {connector_secret}
+X-Connector-Id: {connector_id}
+X-Printer-Id: {printer_id}
+Content-Type: image/jpeg
+Content-Length: {image_size}
+
+[binary image data]
+```
+
+**Response:**
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
+
+```json
+{
+  "status": "completed"
+}
+```
+
+#### Rails Implementation Example
+
+```ruby
+class WebcamRequest < ApplicationRecord
+  belongs_to :printer
+  
+  enum status: { pending: 0, completed: 1, failed: 2, timeout: 3 }
+  
+  # Clean up old requests
+  scope :stale, -> { where('created_at < ?', 30.seconds.ago).where(status: :pending) }
+end
+
+class Api::V1::WebcamRequestsController < ApiController
+  before_action :authenticate_connector!
+  
+  def index
+    @requests = current_connector.printers
+      .joins(:webcam_requests)
+      .where(webcam_requests: { status: :pending })
+      .limit(params[:limit] || 10)
+      .order(created_at: :asc)
+    
+    render json: @requests
+  end
+  
+  def upload
+    @request = WebcamRequest.find(params[:id])
+    
+    # Verify printer ownership
+    unless current_connector.printers.exists?(@request.printer_id)
+      return render json: { error: 'Unauthorized' }, status: :forbidden
+    end
+    
+    # Store image (ActiveStorage, S3, etc.)
+    @request.image.attach(
+      io: request.body,
+      filename: "snapshot_#{@request.printer_id}_#{Time.now.to_i}.jpg",
+      content_type: request.content_type
+    )
+    
+    @request.update!(status: :completed, completed_at: Time.current)
+    
+    render json: { status: 'completed' }
+  end
+end
+
+# Usage: Create a webcam request from your UI
+class PrintersController < ApplicationController
+  def webcam_snapshot
+    @request = @printer.webcam_requests.create!(status: :pending)
+    
+    # Poll for completion (or use WebSocket/ActionCable)
+    30.times do
+      @request.reload
+      break if @request.completed?
+      sleep 0.5
+    end
+    
+    if @request.completed?
+      redirect_to @request.image
+    else
+      @request.timeout!
+      render :timeout
+    end
+  end
+end
+```
+
+#### Moonraker Endpoints Tried
+
+The connector automatically tries these webcam endpoints in order:
+1. `/webcam/?action=snapshot` (most common)
+2. `/webcam/snapshot`
+3. `/server/webcam/snapshot`
+
+This handles different Moonraker/webcam configurations automatically.
+
+#### Performance Considerations
+
+- Connector polls every 2 seconds (faster than snapshots for responsiveness)
+- Limit image size to 10MB
+- Consider caching recent snapshots in Rails
+- Clean up old `pending` requests after timeout (recommended: 30 seconds)
+- Image format is typically JPEG from webcam
 
 ---
 

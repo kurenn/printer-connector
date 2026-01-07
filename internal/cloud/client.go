@@ -205,3 +205,56 @@ func (c *Client) UploadBackup(ctx context.Context, presignedURL, filePath string
 
 	return nil
 }
+
+// GetWebcamRequests fetches pending webcam snapshot requests for this connector
+func (c *Client) GetWebcamRequests(ctx context.Context, limit int) ([]WebcamRequest, error) {
+	path := fmt.Sprintf("/api/v1/connectors/%s/webcam_requests?limit=%d", url.PathEscape(c.connectorID), limit)
+	var out []WebcamRequest
+	if err := c.doJSON(ctx, http.MethodGet, path, c.authHeaders(), nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UploadWebcamSnapshot uploads a webcam snapshot image to Rails
+// Returns nil on success
+func (c *Client) UploadWebcamSnapshot(ctx context.Context, requestID StringOrNumber, printerID int, imageData []byte, contentType string) error {
+	path := fmt.Sprintf("/api/v1/webcam_requests/%s/upload", url.PathEscape(requestID.String()))
+	
+	// Create request with image as body
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+path, bytes.NewReader(imageData))
+	if err != nil {
+		return fmt.Errorf("failed to create upload request: %w", err)
+	}
+
+	// Set headers
+	for k, v := range c.authHeaders() {
+		req.Header.Set(k, v)
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("X-Printer-Id", fmt.Sprintf("%d", printerID))
+	
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
+	}
+
+	// Execute upload
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("upload request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body for error details
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respBody))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, msg)
+	}
+
+	return nil
+}
