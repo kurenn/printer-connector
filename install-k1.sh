@@ -129,12 +129,11 @@ else
             error "Download failed: file too small or corrupted"
         fi
     else
-        error "Failed to download binary from GitHub.
-
-Please manually transfer it:
-  scp printer-connector-mips root@<K1_IP>:/tmp/printer-connector
-  ssh root@<K1_IP> 'cd /tmp && sh install-k1.sh'
-"
+        warn "Failed to download binary from GitHub."
+        echo "Please manually transfer it:"
+        echo "  scp printer-connector-mips root@<K1_IP>:/tmp/printer-connector"
+        echo "  ssh root@<K1_IP> 'cd /tmp && sh install-k1.sh'"
+        exit 1
     fi
 fi
 
