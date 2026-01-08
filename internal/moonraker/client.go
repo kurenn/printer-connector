@@ -91,6 +91,26 @@ func (c *Client) Cancel(ctx context.Context) error {
 	return c.postJSON(ctx, "/printer/print/cancel", map[string]any{}, nil)
 }
 
+// Home executes the G28 homing command. If axes is empty, homes X Y Z.
+// Valid axes are "X", "Y", "Z". Example: Home(ctx, "X", "Y") homes X and Y only.
+func (c *Client) Home(ctx context.Context, axes ...string) error {
+	gcode := "G28"
+	if len(axes) == 0 {
+		// Default: home all axes explicitly
+		gcode = "G28 X Y Z"
+	} else {
+		// Home specific axes: G28 X Y
+		for _, axis := range axes {
+			axis = strings.ToUpper(strings.TrimSpace(axis))
+			if axis == "X" || axis == "Y" || axis == "Z" {
+				gcode += " " + axis
+			}
+		}
+	}
+	req := map[string]any{"script": gcode}
+	return c.postJSON(ctx, "/printer/gcode/script", req, nil)
+}
+
 func (c *Client) StartPrint(ctx context.Context, filename string) error {
 	u := c.baseURL + "/printer/print/start?filename=" + url.QueryEscape(filename)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader([]byte("{}")))
@@ -208,6 +228,42 @@ func (c *Client) UploadFile(ctx context.Context, filename string, content []byte
 	}
 
 	return nil
+}
+
+// GetHistory fetches print job history from Moonraker
+func (c *Client) GetHistory(ctx context.Context, limit int) (map[string]any, error) {
+	if limit <= 0 {
+		limit = 50 // Default limit
+	}
+	u := fmt.Sprintf("%s/server/history/list?limit=%d", c.baseURL, limit)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respB, _ := io.ReadAll(io.LimitReader(resp.Body, 5<<20)) // 5MB limit for history
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respB))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return nil, fmt.Errorf("moonraker http %d: %s", resp.StatusCode, msg)
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(respB, &out); err != nil {
+		return nil, fmt.Errorf("failed to decode history response: %w", err)
+	}
+	return out, nil
 }
 
 // DeleteFile deletes a file from Moonraker

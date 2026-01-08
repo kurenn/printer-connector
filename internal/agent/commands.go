@@ -55,12 +55,30 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 				result["filename"] = filename
 				execErr = mc.StartPrint(ctx, filename)
 			}
+		case "homing":
+			// Optional axes parameter: {"axes": ["X", "Y"]} or empty for all
+			var axes []string
+			if axesParam, ok := cmd.Params["axes"].([]any); ok {
+				for _, a := range axesParam {
+					if axisStr, ok := a.(string); ok {
+						axes = append(axes, axisStr)
+					}
+				}
+			}
+			if len(axes) > 0 {
+				result["axes"] = axes
+			} else {
+				result["axes"] = "all"
+			}
+			execErr = mc.Home(ctx, axes...)
 		case "upload_file":
 			execErr = a.executeUploadFile(ctx, mc, cmd, result)
 		case "delete_file":
 			execErr = a.executeDeleteFile(ctx, mc, cmd, result)
 		case "sync_files":
 			execErr = a.executeSyncFiles(ctx, mc, cmd, result)
+		case "import_history":
+			execErr = a.executeImportHistory(ctx, mc, cmd, result)
 		case "create_backup":
 			execErr = a.executeCreateBackup(ctx, cmd, result)
 		default:
@@ -151,6 +169,32 @@ func (a *Agent) executeSyncFiles(ctx context.Context, mc *moonraker.Client, cmd 
 	result["count"] = len(files)
 
 	a.log.Info("files synced", "command_id", cmd.ID, "count", len(files))
+	return nil
+}
+
+func (a *Agent) executeImportHistory(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+	// Get limit from params, default to 50
+	limit := 50
+	if limitParam, ok := cmd.Params["limit"].(float64); ok {
+		limit = int(limitParam)
+	}
+
+	// Fetch history from Moonraker
+	history, err := mc.GetHistory(ctx, limit)
+	if err != nil {
+		return fmt.Errorf("failed to fetch history from moonraker: %w", err)
+	}
+
+	result["history"] = history
+
+	// Count jobs if available in response
+	if historyResult, ok := history["result"].(map[string]any); ok {
+		if jobs, ok := historyResult["jobs"].([]any); ok {
+			result["count"] = len(jobs)
+			a.log.Info("history imported", "command_id", cmd.ID, "count", len(jobs))
+		}
+	}
+
 	return nil
 }
 

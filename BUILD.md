@@ -2,16 +2,24 @@
 
 ## Overview
 
-This document describes how to build the printer-connector for different platforms.
+This document describes how to build the printer-connector for different platforms using Docker for reproducible, cross-platform builds.
 
 ## Prerequisites
 
-- Go 1.22+ or Docker (recommended for cross-compilation)
-- For Docker builds: Docker installed and running
+- **Docker** (required) - Ensures consistent builds across all platforms
+- Go 1.22+ (optional, for local development only)
 
 ## Build Commands
 
+**All production builds should use Docker** to ensure:
+- Reproducible builds across different development machines
+- Correct Go version (golang:1.23-alpine)
+- Proper cross-compilation toolchain
+- Smaller binaries (stripped with `-ldflags='-s -w'`)
+
 ### Local Development (macOS/Linux)
+
+For quick local testing only (not for deployment):
 
 ```bash
 go build -o printer-connector ./cmd/connector
@@ -19,22 +27,25 @@ go build -o printer-connector ./cmd/connector
 
 ### Raspberry Pi / Vanilla Klipper (ARM64)
 
+**Recommended (Docker):**
+
 ```bash
-GOOS=linux GOARCH=arm64 go build -o printer-connector-arm64 ./cmd/connector
+docker run --rm -v "$PWD":/src -w /src golang:1.23-alpine sh -c \
+  "GOOS=linux GOARCH=arm64 go build -ldflags='-s -w' -o printer-connector-arm64 ./cmd/connector"
 ```
+
+Expected size: ~5.4MB (stripped)
 
 ### K1 Max (MIPS Little-Endian)
 
 **IMPORTANT:** K1 Max requires MIPS little-endian (`mipsle`), not big-endian (`mips`).
-
-Use Docker for consistent cross-compilation:
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src golang:1.23-alpine sh -c \
   "GOOS=linux GOARCH=mipsle go build -ldflags='-s -w' -o printer-connector-mips ./cmd/connector"
 ```
 
-The `-ldflags='-s -w'` flags strip debug info and reduce binary size from ~9MB to ~6MB.
+Expected size: ~6.1MB (stripped)
 
 ### Alternative: MIPS Softfloat (if needed)
 
@@ -47,29 +58,37 @@ docker run --rm -v "$PWD":/src -w /src golang:1.23-alpine sh -c \
 
 ## Architecture Notes
 
-### Why Docker for K1 Max?
+### Why Docker for All Builds?
 
-The K1 Max uses a specific MIPS variant that requires:
-1. **Little-endian** (`GOARCH=mipsle`) - not big-endian
-2. Consistent Go toolchain version (1.23)
-3. Static linking with proper libc compatibility
+Docker provides consistent, reproducible builds by ensuring:
+1. **Same Go version** (1.23) across all development machines
+2. **Proper cross-compilation** toolchain for each target architecture
+3. **Static linking** with correct libc compatibility
+4. **Stripped binaries** for smaller deployment size
 
-Using Docker ensures:
-- Reproducible builds across different development machines
-- Correct Go version (golang:1.23-alpine)
-- Proper cross-compilation toolchain
-- Smaller binaries (stripped)
+The `-ldflags='-s -w'` flags:
+- `-s` - Omit symbol table
+- `-w` - Omit DWARF debug info
+- Result: ~40% smaller binaries (9MB → 5-6MB)
 
-### Binary Size
+### Binary Sizes (Stripped)
 
-- **Unstripped:** ~9.4MB (includes debug symbols)
-- **Stripped:** ~6.1MB (production ready)
+- **ARM64** (Raspberry Pi): ~5.4MB
+- **MIPS** (K1 Max): ~6.1MB
+- **Unstripped**: ~9.4MB (includes debug symbols)
 
 ## Verification
 
-Check the binary architecture:
+Check binary architecture and size:
 
 ```bash
+# ARM64
+ls -lh printer-connector-arm64
+file printer-connector-arm64
+# Should show: ELF 64-bit LSB executable, ARM aarch64, statically linked, stripped
+
+# MIPS
+ls -lh printer-connector-mips
 file printer-connector-mips
 # Should show: ELF 32-bit LSB executable, MIPS, MIPS32 version 1 (SYSV), statically linked, stripped
 ```
@@ -95,15 +114,24 @@ This means the binary architecture doesn't match the CPU. Common causes:
 
 ## Release Process
 
-When creating a release, build all variants:
+Build all variants using Docker for consistent, production-ready binaries:
 
 ```bash
-# ARM64 for Raspberry Pi
-GOOS=linux GOARCH=arm64 go build -o dist/printer-connector-arm64 ./cmd/connector
+# Create dist directory
+mkdir -p dist
 
-# MIPS for K1 Max (use Docker)
+# ARM64 for Raspberry Pi
+docker run --rm -v "$PWD":/src -w /src golang:1.23-alpine sh -c \
+  "GOOS=linux GOARCH=arm64 go build -ldflags='-s -w' -o dist/printer-connector-arm64 ./cmd/connector"
+
+# MIPS for K1 Max
 docker run --rm -v "$PWD":/src -w /src golang:1.23-alpine sh -c \
   "GOOS=linux GOARCH=mipsle go build -ldflags='-s -w' -o dist/printer-connector-mips ./cmd/connector"
+
+# Verify builds
+ls -lh dist/
+file dist/printer-connector-arm64
+file dist/printer-connector-mips
 ```
 
 Tag and upload to GitHub releases with both binaries.
