@@ -1,0 +1,75 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "yaml"
+
+def fail!(message)
+  warn "contract check failed: #{message}"
+  exit 1
+end
+
+root = File.expand_path("..", __dir__)
+contracts_dir = ENV["PRINT_CONTRACTS_DIR"] || File.expand_path("../print-contracts", root)
+validate_script = File.join(contracts_dir, "scripts", "validate")
+openapi_file = File.join(contracts_dir, "openapi", "connector-api.yaml")
+client_file = File.join(root, "internal", "cloud", "client.go")
+commands_file = File.join(root, "internal", "agent", "commands.go")
+
+fail!("contracts directory not found: #{contracts_dir}") unless Dir.exist?(contracts_dir)
+fail!("missing validator: #{validate_script}") unless File.executable?(validate_script)
+fail!("missing OpenAPI file: #{openapi_file}") unless File.exist?(openapi_file)
+fail!("missing cloud client: #{client_file}") unless File.exist?(client_file)
+fail!("missing commands file: #{commands_file}") unless File.exist?(commands_file)
+
+system(validate_script) || fail!("shared contract validation failed")
+
+openapi = YAML.load_file(openapi_file)
+paths = openapi["paths"] || {}
+required_operations = [
+  ["post", "/api/v1/connectors/register"],
+  ["post", "/api/v1/connectors/{id}/heartbeat"],
+  ["get", "/api/v1/connectors/{connector_id}/commands"],
+  ["post", "/api/v1/commands/{id}/complete"],
+  ["post", "/api/v1/snapshots/batch"],
+  ["get", "/api/v1/connectors/{id}/webcam_requests"],
+  ["put", "/api/v1/webcam_requests/{id}/upload"]
+]
+
+missing_ops = required_operations.reject do |method, path|
+  entry = paths[path]
+  entry.is_a?(Hash) && entry.key?(method)
+end
+unless missing_ops.empty?
+  fail!("OpenAPI missing required operations: #{missing_ops.map { |m, p| "#{m.upcase} #{p}" }.join(", ")}")
+end
+
+client_content = File.read(client_file)
+
+required_client_markers = [
+  '"/api/v1/connectors/register"',
+  '"/api/v1/connectors/%s/heartbeat"',
+  '"/api/v1/connectors/%s/commands?limit=%d"',
+  '"/api/v1/commands/%s/complete"',
+  '"/api/v1/snapshots/batch"',
+  '"/api/v1/connectors/%s/webcam_requests?limit=%d"',
+  '"/api/v1/webcam_requests/%s/upload"'
+]
+
+required_client_markers.each do |marker|
+  fail!("missing endpoint usage in client.go: #{marker}") unless client_content.include?(marker)
+end
+
+auth_header_markers = [
+  '"Authorization":  "Bearer " + c.connectorSecret',
+  '"X-Connector-Id": c.connectorID'
+]
+auth_header_markers.each do |marker|
+  fail!("missing auth header behavior in client.go: #{marker}") unless client_content.include?(marker)
+end
+
+commands_content = File.read(commands_file)
+if openapi.dig("components", "schemas", "Command", "properties", "action", "enum")&.include?("remote_print")
+  fail!("remote_print missing in agent command switch") unless commands_content.include?('case "remote_print":')
+end
+
+puts "contract check passed (printer-connector)"

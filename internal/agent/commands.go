@@ -2,9 +2,15 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,6 +19,8 @@ import (
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/moonraker"
 )
+
+const maxRemotePrintDownloadBytes int64 = 200 * 1024 * 1024
 
 func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 	cmds, err := a.cloud.GetCommands(ctx, a.cfg.ConnectorID, 20)
@@ -55,6 +63,8 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 				result["filename"] = filename
 				execErr = mc.StartPrint(ctx, filename)
 			}
+		case "remote_print":
+			execErr = a.executeRemotePrint(ctx, mc, cmd, result)
 		case "homing":
 			// Optional axes parameter: {"axes": ["X", "Y"]} or empty for all
 			var axes []string
@@ -139,6 +149,136 @@ func (a *Agent) executeUploadFile(ctx context.Context, mc *moonraker.Client, cmd
 
 	a.log.Info("file uploaded", "command_id", cmd.ID, "filename", filename, "size", len(content))
 	return nil
+}
+
+func (a *Agent) executeRemotePrint(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+	downloadURL, _ := cmd.Params["download_url"].(string)
+	downloadURL = strings.TrimSpace(downloadURL)
+	if downloadURL == "" {
+		return fmt.Errorf("missing params.download_url for remote_print")
+	}
+
+	filename, _ := cmd.Params["filename"].(string)
+	filename = strings.TrimSpace(filename)
+	if filename != "" && (strings.Contains(filename, "/") || strings.Contains(filename, "\\")) {
+		return fmt.Errorf("invalid params.filename for remote_print: path separators are not allowed")
+	}
+	if filename == "" {
+		filename = remotePrintFilenameFromURL(downloadURL)
+	}
+	if !isAllowedGcodeFilename(filename) {
+		return fmt.Errorf("invalid params.filename for remote_print: must end in .gcode, .gco, or .g")
+	}
+
+	startPrint := true
+	if raw, ok := cmd.Params["start_print"]; ok {
+		if parsed, ok := raw.(bool); ok {
+			startPrint = parsed
+		}
+	}
+
+	expectedSHA, _ := cmd.Params["sha256"].(string)
+	expectedSHA = strings.TrimSpace(strings.ToLower(expectedSHA))
+	if expectedSHA != "" {
+		if _, err := hex.DecodeString(expectedSHA); err != nil || len(expectedSHA) != 64 {
+			return fmt.Errorf("invalid params.sha256 for remote_print: expected 64-character hex digest")
+		}
+	}
+
+	content, actualSHA, err := downloadRemotePrintFile(ctx, downloadURL, maxRemotePrintDownloadBytes)
+	if err != nil {
+		return err
+	}
+
+	if expectedSHA != "" && expectedSHA != actualSHA {
+		return fmt.Errorf("remote_print checksum mismatch: expected %s, got %s", expectedSHA, actualSHA)
+	}
+
+	if err := mc.UploadFile(ctx, filename, content); err != nil {
+		return fmt.Errorf("failed to upload remote_print file to moonraker: %w", err)
+	}
+
+	result["download_url"] = downloadURL
+	result["filename"] = filename
+	result["size_bytes"] = len(content)
+	result["sha256"] = actualSHA
+	result["start_print"] = startPrint
+
+	if startPrint {
+		if err := mc.StartPrint(ctx, filename); err != nil {
+			return fmt.Errorf("failed to start remote_print in moonraker: %w", err)
+		}
+		result["started"] = true
+	} else {
+		result["started"] = false
+	}
+
+	a.log.Info("remote print succeeded", "command_id", cmd.ID, "filename", filename, "size_bytes", len(content), "started", startPrint)
+	return nil
+}
+
+func downloadRemotePrintFile(ctx context.Context, downloadURL string, maxBytes int64) ([]byte, string, error) {
+	if maxBytes <= 0 {
+		return nil, "", fmt.Errorf("invalid max download size: %d", maxBytes)
+	}
+
+	parsed, err := url.Parse(downloadURL)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid remote_print download_url: %w", err)
+	}
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return nil, "", fmt.Errorf("invalid remote_print download_url: must be http(s)")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create remote_print download request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("remote_print download failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("remote_print download failed: http %d", resp.StatusCode)
+	}
+
+	if resp.ContentLength > maxBytes {
+		return nil, "", fmt.Errorf("remote_print download exceeds max size: %d > %d", resp.ContentLength, maxBytes)
+	}
+
+	limited := io.LimitReader(resp.Body, maxBytes+1)
+	content, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to read remote_print response: %w", err)
+	}
+	if int64(len(content)) > maxBytes {
+		return nil, "", fmt.Errorf("remote_print download exceeds max size after read: %d > %d", len(content), maxBytes)
+	}
+
+	h := sha256.Sum256(content)
+	digest := hex.EncodeToString(h[:])
+	return content, digest, nil
+}
+
+func remotePrintFilenameFromURL(downloadURL string) string {
+	parsed, err := url.Parse(downloadURL)
+	if err != nil {
+		return "remote_print.gcode"
+	}
+	name := strings.TrimSpace(path.Base(parsed.Path))
+	if name == "" || name == "." || name == "/" {
+		return "remote_print.gcode"
+	}
+	return name
+}
+
+func isAllowedGcodeFilename(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	return strings.HasSuffix(lower, ".gcode") || strings.HasSuffix(lower, ".gco") || strings.HasSuffix(lower, ".g")
 }
 
 func (a *Agent) executeDeleteFile(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
