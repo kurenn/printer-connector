@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,14 @@ type Client struct {
 	baseURL    string
 	uiBaseURL  string
 	httpClient *http.Client
+
+	// Filament-sensor object names (e.g. "filament_switch_sensor runout") are
+	// printer-specific, so we discover them once via /printer/objects/list and
+	// cache them. Guarded by mu; resolved is only set true on a successful
+	// discovery so a transient failure is retried on the next query.
+	mu              sync.Mutex
+	filamentSensors []string
+	sensorsResolved bool
 }
 
 func New(baseURL string, uiPort int) *Client {
@@ -61,22 +70,89 @@ func New(baseURL string, uiPort int) *Client {
 }
 
 func (c *Client) QueryObjects(ctx context.Context) (map[string]any, error) {
-	req := map[string]any{
-		"objects": map[string]any{
-			"print_stats":    nil,
-			"virtual_sdcard": nil,
-			"extruder":       nil,
-			"heater_bed":     nil,
-			"toolhead":       nil,
-			"pause_resume":   nil,
-		},
+	objects := map[string]any{
+		"print_stats":    nil,
+		"virtual_sdcard": nil,
+		"extruder":       nil,
+		"heater_bed":     nil,
+		"toolhead":       nil,
+		"pause_resume":   nil,
 	}
+	// Include any filament-runout sensors so snapshots carry filament_detected.
+	// Discovery is best-effort: if it fails we still report the core objects.
+	for _, name := range c.filamentSensorObjects(ctx) {
+		objects[name] = nil
+	}
+
+	req := map[string]any{"objects": objects}
 
 	var out map[string]any
 	if err := c.postJSON(ctx, "/printer/objects/query", req, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// filamentSensorObjects returns the printer's filament_switch_sensor /
+// filament_motion_sensor object names, discovering and caching them on first
+// use. On discovery failure it returns nil (the caller proceeds without them)
+// and leaves the cache unresolved so the next query retries.
+func (c *Client) filamentSensorObjects(ctx context.Context) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sensorsResolved {
+		return c.filamentSensors
+	}
+
+	names, err := c.listObjects(ctx)
+	if err != nil {
+		return nil
+	}
+
+	var sensors []string
+	for _, n := range names {
+		if strings.HasPrefix(n, "filament_switch_sensor ") || strings.HasPrefix(n, "filament_motion_sensor ") {
+			sensors = append(sensors, n)
+		}
+	}
+	c.filamentSensors = sensors
+	c.sensorsResolved = true
+	return sensors
+}
+
+// listObjects fetches the list of available Klipper object names from Moonraker.
+func (c *Client) listObjects(ctx context.Context) ([]string, error) {
+	u := c.baseURL + "/printer/objects/list"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respB, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1MB cap
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respB))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return nil, fmt.Errorf("moonraker http %d: %s", resp.StatusCode, msg)
+	}
+
+	var parsed struct {
+		Result struct {
+			Objects []string `json:"objects"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(respB, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to decode objects list: %w", err)
+	}
+	return parsed.Result.Objects, nil
 }
 
 func (c *Client) Pause(ctx context.Context) error {
