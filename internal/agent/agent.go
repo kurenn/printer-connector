@@ -47,11 +47,6 @@ func New(opts Options) *Agent {
 		UserAgent:       userAgent,
 	})
 
-	moons := map[int]*moonraker.Client{}
-	for _, p := range opts.Config.Moonraker {
-		moons[p.PrinterID] = moonraker.New(p.BaseURL, p.UIPort)
-	}
-
 	return &Agent{
 		cfgPath:   opts.ConfigPath,
 		cfg:       opts.Config,
@@ -59,9 +54,20 @@ func New(opts Options) *Agent {
 		version:   opts.Version,
 		once:      opts.Once,
 		cloud:     cl,
-		moons:     moons,
+		moons:     buildMoons(opts.Config.Moonraker),
 		startedAt: time.Now(),
 	}
+}
+
+// buildMoons creates one Moonraker client per configured printer, keyed by
+// printer ID. It must be rebuilt whenever the printer IDs change (e.g. after
+// pairing populates them), otherwise lookups by the real ID miss.
+func buildMoons(printers []config.MoonrakerPrinter) map[int]*moonraker.Client {
+	moons := make(map[int]*moonraker.Client, len(printers))
+	for _, p := range printers {
+		moons[p.PrinterID] = moonraker.New(p.BaseURL, p.UIPort)
+	}
+	return moons
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -162,6 +168,11 @@ func (a *Agent) pair(ctx context.Context) error {
 					"rails_name", printer.Name)
 			}
 		}
+
+		// Rebuild the Moonraker client map: it was keyed by the pre-pairing
+		// printer IDs (all 0), so without this the post-pairing loops would
+		// look up the real IDs and find nothing.
+		a.moons = buildMoons(a.cfg.Moonraker)
 	}
 
 	if err := config.SaveAtomic(a.cfgPath, a.cfg); err != nil {
@@ -188,7 +199,9 @@ func (a *Agent) heartbeatLoop(ctx context.Context) error {
 
 		if err := a.sendHeartbeat(ctx); err != nil {
 			a.log.Warn("heartbeat failed", "error", err)
-			time.Sleep(bo.Next())
+			if werr := util.Wait(ctx, bo.Next()); werr != nil {
+				return werr
+			}
 		} else {
 			bo.Reset()
 		}
@@ -216,7 +229,9 @@ func (a *Agent) commandsLoop(ctx context.Context) error {
 
 		if err := a.pollAndExecuteCommands(ctx); err != nil {
 			a.log.Warn("commands poll failed", "error", err)
-			time.Sleep(bo.Next())
+			if werr := util.Wait(ctx, bo.Next()); werr != nil {
+				return werr
+			}
 		} else {
 			bo.Reset()
 		}
@@ -244,7 +259,9 @@ func (a *Agent) snapshotsLoop(ctx context.Context) error {
 
 		if err := a.collectAndPushSnapshots(ctx); err != nil {
 			a.log.Warn("snapshots push failed", "error", err)
-			time.Sleep(bo.Next())
+			if werr := util.Wait(ctx, bo.Next()); werr != nil {
+				return werr
+			}
 		} else {
 			bo.Reset()
 		}
@@ -273,7 +290,9 @@ func (a *Agent) webcamLoop(ctx context.Context) error {
 
 		if err := a.processWebcamRequests(ctx); err != nil {
 			a.log.Warn("webcam requests processing failed", "error", err)
-			time.Sleep(bo.Next())
+			if werr := util.Wait(ctx, bo.Next()); werr != nil {
+				return werr
+			}
 		} else {
 			bo.Reset()
 		}

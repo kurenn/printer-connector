@@ -220,7 +220,7 @@ func (c *Client) GetWebcamRequests(ctx context.Context, limit int) ([]WebcamRequ
 // Returns nil on success
 func (c *Client) UploadWebcamSnapshot(ctx context.Context, requestID StringOrNumber, printerID int, imageData []byte, contentType string) error {
 	path := fmt.Sprintf("/api/v1/webcam_requests/%s/upload", url.PathEscape(requestID.String()))
-	
+
 	// Create request with image as body
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+path, bytes.NewReader(imageData))
 	if err != nil {
@@ -233,7 +233,7 @@ func (c *Client) UploadWebcamSnapshot(ctx context.Context, requestID StringOrNum
 	}
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Printer-Id", fmt.Sprintf("%d", printerID))
-	
+
 	if c.userAgent != "" {
 		req.Header.Set("User-Agent", c.userAgent)
 	}

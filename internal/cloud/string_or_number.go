@@ -25,7 +25,8 @@ func (s *StringOrNumber) UnmarshalJSON(b []byte) error {
 	*s = StringOrNumber(string(b))
 	return nil
 }
+
 // String returns the string value
 func (s StringOrNumber) String() string {
-return string(s)
+	return string(s)
 }

@@ -296,9 +296,9 @@ func (c *Client) DeleteFile(ctx context.Context, filename string) error {
 
 // FileInfo represents a file from Moonraker
 type FileInfo struct {
-	Path         string  `json:"path"`
-	Modified     float64 `json:"modified"`
-	Size         int64   `json:"size"`
+	Path           string   `json:"path"`
+	Modified       float64  `json:"modified"`
+	Size           int64    `json:"size"`
 	PrintStartTime *float64 `json:"print_start_time,omitempty"`
 }
 
@@ -363,12 +363,14 @@ func (c *Client) GetWebcamSnapshot(ctx context.Context) ([]byte, string, error) 
 			lastErr = err
 			continue
 		}
-		defer resp.Body.Close()
 
-		// Success - return the image
+		// Success - return the image. Close explicitly rather than via defer:
+		// this runs in a loop, so a deferred close would leak every probed
+		// endpoint's body until the whole function returns.
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			// Limit to 10MB for safety
 			imageData, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+			resp.Body.Close()
 			if err != nil {
 				return nil, "", fmt.Errorf("failed to read snapshot: %w", err)
 			}
@@ -383,11 +385,13 @@ func (c *Client) GetWebcamSnapshot(ctx context.Context) ([]byte, string, error) 
 
 		// 404 means try next endpoint
 		if resp.StatusCode == 404 {
+			resp.Body.Close()
 			continue
 		}
 
 		// Other error - read response and return
 		respB, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
 		msg := strings.TrimSpace(string(respB))
 		if msg == "" {
 			msg = resp.Status

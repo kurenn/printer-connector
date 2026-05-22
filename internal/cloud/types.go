@@ -1,9 +1,9 @@
 package cloud
 
 type RegisterRequest struct {
-	PairingToken string       `json:"pairing_token"`
-	SiteName     string       `json:"site_name,omitempty"`
-	Device       DeviceInfo   `json:"device"`
+	PairingToken string        `json:"pairing_token"`
+	SiteName     string        `json:"site_name,omitempty"`
+	Device       DeviceInfo    `json:"device"`
 	Printers     []PrinterInfo `json:"printers,omitempty"`
 }
 
@@ -29,7 +29,7 @@ type RegisterResponse struct {
 		Secret string `json:"secret"`
 	} `json:"credentials"`
 	Printers []RegisteredPrinter `json:"printers,omitempty"`
-	Polling struct {
+	Polling  struct {
 		CommandsSeconds  int `json:"commands_seconds"`
 		SnapshotsSeconds int `json:"snapshots_seconds"`
 	} `json:"polling"`
