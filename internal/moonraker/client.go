@@ -296,9 +296,9 @@ func (c *Client) DeleteFile(ctx context.Context, filename string) error {
 
 // FileInfo represents a file from Moonraker
 type FileInfo struct {
-	Path         string  `json:"path"`
-	Modified     float64 `json:"modified"`
-	Size         int64   `json:"size"`
+	Path           string   `json:"path"`
+	Modified       float64  `json:"modified"`
+	Size           int64    `json:"size"`
 	PrintStartTime *float64 `json:"print_start_time,omitempty"`
 }
 

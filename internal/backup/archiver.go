@@ -164,11 +164,11 @@ func Create(opts Options) (*Result, error) {
 			// Use LimitReader to ensure we don't write more than header.Size
 			written, err := io.Copy(tarWriter, io.LimitReader(file, header.Size))
 			file.Close() // Close immediately after copying
-			
+
 			if err != nil {
 				return fmt.Errorf("failed to write file %s to archive: %w", path, err)
 			}
-			
+
 			// Verify we wrote the expected amount
 			if written != header.Size {
 				return fmt.Errorf("size mismatch for %s: expected %d bytes, wrote %d bytes", path, header.Size, written)
