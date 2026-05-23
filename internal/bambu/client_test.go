@@ -17,7 +17,7 @@ var validCapabilities = map[string]bool{
 }
 
 func TestBambu_TelemetryIsCanonical(t *testing.T) {
-	c := New("01ABC", "12345678")
+	c := New("192.168.1.50", "01ABC", "12345678")
 	got, err := c.Telemetry(context.Background())
 	if err != nil {
 		t.Fatalf("Telemetry: %v", err)
@@ -34,7 +34,7 @@ func TestBambu_TelemetryIsCanonical(t *testing.T) {
 }
 
 func TestBambu_CapabilitiesAreValid(t *testing.T) {
-	caps := New("s", "a").Capabilities()
+	caps := New("h", "s", "a").Capabilities()
 	if len(caps) == 0 {
 		t.Fatal("expected non-empty capabilities")
 	}
@@ -46,7 +46,7 @@ func TestBambu_CapabilitiesAreValid(t *testing.T) {
 }
 
 func TestBambu_ControlActionsNotImplemented(t *testing.T) {
-	c := New("s", "a")
+	c := New("h", "s", "a")
 	if err := c.Pause(context.Background()); !errors.Is(err, ErrNotImplemented) {
 		t.Errorf("Pause err = %v, want ErrNotImplemented", err)
 	}

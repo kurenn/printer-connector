@@ -28,7 +28,7 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 		start := time.Now()
 		a.log.Info("executing command", "command_id", cmd.ID, "printer_id", cmd.PrinterID, "action", cmd.Action)
 
-		mc := a.moons[cmd.PrinterID]
+		mc := a.drivers[cmd.PrinterID]
 		if mc == nil {
 			a.completeCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
 				Status:       "failed",
