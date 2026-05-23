@@ -1,0 +1,58 @@
+name: Release
+
+# Cross-compiles the connector for every supported target and publishes the
+# binaries as GitHub Release assets. Triggered by pushing a version tag, e.g.:
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Build parameters match the binaries currently shipped from the repo root
+# (verified via `go version -m`): static (CGO disabled), stripped, and — for the
+# Creality K1/K1 Max — mipsle + hardfloat. Changing GOMIPS to softfloat would
+# produce a binary that does not run on the K1, so leave it as hardfloat unless
+# validated on real hardware.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: cross-compile · publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Cross-compile connector binaries
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          version="${GITHUB_REF_NAME}"
+          ldflags="-s -w -X main.version=${version#v}"
+          echo "Building ${version}"
+
+          GOOS=linux GOARCH=arm64 \
+            go build -trimpath -ldflags "$ldflags" -o dist/printer-connector-arm64 ./cmd/connector
+          GOOS=linux GOARCH=amd64 \
+            go build -trimpath -ldflags "$ldflags" -o dist/printer-connector-amd64 ./cmd/connector
+          GOOS=linux GOARCH=mipsle GOMIPS=hardfloat \
+            go build -trimpath -ldflags "$ldflags" -o dist/printer-connector-mips ./cmd/connector
+
+      - name: Generate checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/printer-connector-arm64
+            dist/printer-connector-amd64
+            dist/printer-connector-mips
+            dist/SHA256SUMS
