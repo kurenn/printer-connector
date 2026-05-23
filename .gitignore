@@ -1,0 +1,21 @@
+# OS / editor noise
+.DS_Store
+*~
+*.swp
+
+# Go build & test artifacts
+/dist/
+*.test
+*.out
+coverage.*
+
+# Compiled connector binaries.
+# Release builds are produced by .github/workflows/release.yml and published as
+# GitHub Release assets — they should not live in git. The arch binaries still
+# tracked at the repo root are legacy; they will be removed once installers point
+# at Releases (see release workflow PR notes).
+/connector
+/printer-connector
+/printer-connector-amd64
+/printer-connector-arm64
+/printer-connector-mips
