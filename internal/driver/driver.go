@@ -27,6 +27,12 @@ type Driver interface {
 	// QueryObjects returns the raw protocol state.
 	QueryObjects(ctx context.Context) (map[string]any, error)
 
+	// NormalizeRaw converts this driver's raw response (as returned by
+	// QueryObjects) into canonical telemetry without performing I/O. The agent
+	// uses it to attach payload["normalized"] alongside the raw snapshot it just
+	// fetched, avoiding a second query.
+	NormalizeRaw(raw map[string]any) Telemetry
+
 	// Print control.
 	Pause(ctx context.Context) error
 	Resume(ctx context.Context) error
