@@ -84,20 +84,52 @@ func TestNormalize_PrintingSnapshot(t *testing.T) {
 }
 
 func TestNormalize_StateMapping(t *testing.T) {
-	cases := map[string]string{
-		"printing":  driver.StatePrinting,
-		"paused":    driver.StatePaused,
-		"complete":  driver.StateComplete,
-		"error":     driver.StateError,
-		"standby":   driver.StateIdle,
-		"cancelled": driver.StateIdle,
-		"":          driver.StateIdle,
-		"weird":     driver.StateIdle,
+	cases := []struct {
+		name             string
+		state            string
+		isActive, paused bool
+		want             string
+	}{
+		{"printing by state", "printing", false, false, driver.StatePrinting},
+		{"printing by is_active flag", "standby", true, false, driver.StatePrinting},
+		{"paused by state", "paused", false, false, driver.StatePaused},
+		{"paused by is_paused flag", "printing", true, true, driver.StatePaused}, // paused wins over printing
+		{"complete", "complete", false, false, driver.StateComplete},
+		{"error wins over everything", "error", true, true, driver.StateError},
+		{"standby", "standby", false, false, driver.StateIdle},
+		{"cancelled", "cancelled", false, false, driver.StateIdle},
+		{"empty", "", false, false, driver.StateIdle},
+		{"unknown", "weird", false, false, driver.StateIdle},
 	}
-	for in, want := range cases {
-		if got := mapState(in); got != want {
-			t.Errorf("mapState(%q) = %q, want %q", in, got, want)
+	for _, c := range cases {
+		if got := moonrakerState(c.state, c.isActive, c.paused); got != c.want {
+			t.Errorf("%s: moonrakerState(%q, active=%v, paused=%v) = %q, want %q",
+				c.name, c.state, c.isActive, c.paused, got, c.want)
 		}
+	}
+}
+
+// Parity guard: a snapshot that the raw Printers::Status would call "printing"
+// via virtual_sdcard.is_active (even with print_stats.state still "standby")
+// must normalize to printing, not idle — otherwise emitting normalized would
+// regress live status.
+func TestNormalize_HonorsVirtualSdcardActive(t *testing.T) {
+	raw := decodeRaw(t, `{"result":{"status":{
+	  "print_stats":{"state":"standby","filename":"a.gcode"},
+	  "virtual_sdcard":{"is_active":true,"progress":0.1}
+	}}}`)
+	if got := Normalize(raw).State; got != driver.StatePrinting {
+		t.Errorf("state = %q, want printing (is_active true)", got)
+	}
+}
+
+func TestNormalize_HonorsPauseResume(t *testing.T) {
+	raw := decodeRaw(t, `{"result":{"status":{
+	  "print_stats":{"state":"printing","filename":"a.gcode"},
+	  "pause_resume":{"is_paused":true}
+	}}}`)
+	if got := Normalize(raw).State; got != driver.StatePaused {
+		t.Errorf("state = %q, want paused (is_paused true)", got)
 	}
 }
 

@@ -28,6 +28,12 @@ func (c *Client) Telemetry(ctx context.Context) (driver.Telemetry, error) {
 	return Normalize(raw), nil
 }
 
+// NormalizeRaw converts an already-fetched QueryObjects response into canonical
+// telemetry without performing I/O.
+func (c *Client) NormalizeRaw(raw map[string]any) driver.Telemetry {
+	return Normalize(raw)
+}
+
 // Normalize converts a Moonraker /printer/objects/query response into canonical
 // telemetry. It is defensive: missing or oddly-typed fields yield zero values
 // rather than errors, so a partial Moonraker response still produces telemetry.
@@ -41,7 +47,11 @@ func Normalize(raw map[string]any) driver.Telemetry {
 	}
 
 	printStats := childMap(status, "print_stats")
-	t.State = mapState(getString(printStats, "state"))
+	t.State = moonrakerState(
+		getString(printStats, "state"),
+		getBool(childMap(status, "virtual_sdcard"), "is_active"),
+		getBool(childMap(status, "pause_resume"), "is_paused"),
+	)
 
 	job := driver.Job{
 		Filename: getString(printStats, "filename"),
@@ -74,20 +84,33 @@ func Normalize(raw map[string]any) driver.Telemetry {
 	return t
 }
 
-// mapState maps Klipper print_stats.state to a canonical state.
-func mapState(s string) string {
-	switch s {
-	case "printing":
-		return driver.StatePrinting
-	case "paused":
-		return driver.StatePaused
-	case "complete":
-		return driver.StateComplete
-	case "error":
+// moonrakerState derives the canonical state from Klipper's print_stats.state
+// plus the virtual_sdcard/pause_resume flags. The precedence mirrors the cloud's
+// raw Printers::Status so emitting normalized telemetry doesn't change a live
+// printer's reported state: error > paused (is_paused or state) > printing
+// (is_active or state) > complete > idle. "cancelled"/"standby"/"ready"/unknown
+// all fall through to idle.
+func moonrakerState(state string, isActive, isPaused bool) string {
+	switch {
+	case state == "error":
 		return driver.StateError
-	default: // "standby", "cancelled", "" and anything unexpected
+	case isPaused || state == "paused":
+		return driver.StatePaused
+	case isActive || state == "printing":
+		return driver.StatePrinting
+	case state == "complete":
+		return driver.StateComplete
+	default:
 		return driver.StateIdle
 	}
+}
+
+func getBool(m map[string]any, k string) bool {
+	if m == nil {
+		return false
+	}
+	v, _ := m[k].(bool)
+	return v
 }
 
 func nestedMap(m map[string]any, keys ...string) map[string]any {

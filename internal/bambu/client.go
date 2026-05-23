@@ -36,11 +36,17 @@ func (c *Client) Capabilities() []string {
 }
 
 func (c *Client) Telemetry(ctx context.Context) (driver.Telemetry, error) {
+	return c.NormalizeRaw(nil), nil
+}
+
+// NormalizeRaw ignores raw until the real MQTT driver lands, reporting an
+// offline placeholder so the canonical envelope is still well-formed.
+func (c *Client) NormalizeRaw(raw map[string]any) driver.Telemetry {
 	return driver.Telemetry{
 		SchemaVersion: driver.SchemaVersion,
 		Driver:        driver.Bambu,
 		State:         driver.StateOffline,
-	}, nil
+	}
 }
 
 func (c *Client) QueryObjects(ctx context.Context) (map[string]any, error) {

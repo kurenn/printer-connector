@@ -33,6 +33,13 @@ func TestBambu_TelemetryIsCanonical(t *testing.T) {
 	}
 }
 
+func TestBambu_NormalizeRawIsOfflineStub(t *testing.T) {
+	got := New("h", "s", "a").NormalizeRaw(map[string]any{"anything": 1})
+	if got.Driver != driver.Bambu || got.State != driver.StateOffline || got.SchemaVersion != driver.SchemaVersion {
+		t.Errorf("unexpected stub telemetry: %+v", got)
+	}
+}
+
 func TestBambu_CapabilitiesAreValid(t *testing.T) {
 	caps := New("h", "s", "a").Capabilities()
 	if len(caps) == 0 {

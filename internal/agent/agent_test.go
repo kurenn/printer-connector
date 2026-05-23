@@ -6,8 +6,53 @@ import (
 
 	"printer-connector/internal/bambu"
 	"printer-connector/internal/config"
+	"printer-connector/internal/driver"
 	"printer-connector/internal/moonraker"
 )
+
+func testAgent(t *testing.T, printers []config.Printer) *Agent {
+	t.Helper()
+	cfg := &config.Config{
+		CloudURL:        "https://www.spoolr.io",
+		ConnectorID:     "1",
+		ConnectorSecret: "s",
+		Printers:        printers,
+	}
+	return New(Options{Config: cfg, Logger: slog.Default(), Version: "test"})
+}
+
+func TestWithNormalized_AttachesCanonicalTelemetry(t *testing.T) {
+	a := testAgent(t, []config.Printer{
+		{PrinterID: 7, Type: config.TypeMoonraker, BaseURL: "http://localhost:7125"},
+	})
+	raw := map[string]any{"result": map[string]any{"status": map[string]any{
+		"print_stats":    map[string]any{"state": "printing", "filename": "b.gcode"},
+		"virtual_sdcard": map[string]any{"progress": 0.5},
+	}}}
+
+	out := a.withNormalized(7, raw)
+
+	norm, ok := out["normalized"].(driver.Telemetry)
+	if !ok {
+		t.Fatalf("normalized not attached or wrong type: %T", out["normalized"])
+	}
+	if norm.State != driver.StatePrinting {
+		t.Errorf("normalized state = %q, want printing", norm.State)
+	}
+	if out["result"] == nil {
+		t.Error("raw payload must remain intact alongside normalized")
+	}
+}
+
+func TestWithNormalized_NoDriverLeavesPayloadUntouched(t *testing.T) {
+	a := testAgent(t, []config.Printer{
+		{PrinterID: 7, Type: config.TypeMoonraker, BaseURL: "http://localhost:7125"},
+	})
+	out := a.withNormalized(999, map[string]any{"x": 1}) // no driver for id 999
+	if _, ok := out["normalized"]; ok {
+		t.Error("should not attach normalized when no driver exists for the printer")
+	}
+}
 
 // New must build its driver map from Config.Printers (the canonical list Load
 // populates), not the legacy Moonraker field which Load clears to nil.
