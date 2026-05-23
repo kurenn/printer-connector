@@ -11,7 +11,7 @@ import (
 
 	"printer-connector/internal/backup"
 	"printer-connector/internal/cloud"
-	"printer-connector/internal/moonraker"
+	"printer-connector/internal/driver"
 	"printer-connector/internal/util"
 )
 
@@ -141,7 +141,7 @@ func (a *Agent) completeCommand(ctx context.Context, id cloud.StringOrNumber, re
 	}
 }
 
-func (a *Agent) executeUploadFile(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+func (a *Agent) executeUploadFile(ctx context.Context, mc driver.Driver, cmd cloud.Command, result map[string]any) error {
 	filename, _ := cmd.Params["filename"].(string)
 	if filename == "" {
 		return fmt.Errorf("missing params.filename for upload_file")
@@ -170,7 +170,7 @@ func (a *Agent) executeUploadFile(ctx context.Context, mc *moonraker.Client, cmd
 	return nil
 }
 
-func (a *Agent) executeDeleteFile(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+func (a *Agent) executeDeleteFile(ctx context.Context, mc driver.Driver, cmd cloud.Command, result map[string]any) error {
 	filename, _ := cmd.Params["filename"].(string)
 	if filename == "" {
 		return fmt.Errorf("missing params.filename for delete_file")
@@ -187,7 +187,7 @@ func (a *Agent) executeDeleteFile(ctx context.Context, mc *moonraker.Client, cmd
 	return nil
 }
 
-func (a *Agent) executeSyncFiles(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+func (a *Agent) executeSyncFiles(ctx context.Context, mc driver.Driver, cmd cloud.Command, result map[string]any) error {
 	// Fetch files list from Moonraker
 	files, err := mc.ListFiles(ctx)
 	if err != nil {
@@ -201,7 +201,7 @@ func (a *Agent) executeSyncFiles(ctx context.Context, mc *moonraker.Client, cmd 
 	return nil
 }
 
-func (a *Agent) executeImportHistory(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
+func (a *Agent) executeImportHistory(ctx context.Context, mc driver.Driver, cmd cloud.Command, result map[string]any) error {
 	// Get limit from params, default to 50
 	limit := 50
 	if limitParam, ok := cmd.Params["limit"].(float64); ok {

@@ -11,6 +11,7 @@ import (
 
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/config"
+	"printer-connector/internal/driver"
 	"printer-connector/internal/moonraker"
 	"printer-connector/internal/util"
 )
@@ -31,7 +32,7 @@ type Agent struct {
 	once    bool
 
 	cloud *cloud.Client
-	moons map[int]*moonraker.Client
+	moons map[int]driver.Driver
 
 	startedAt time.Time
 }
@@ -59,11 +60,12 @@ func New(opts Options) *Agent {
 	}
 }
 
-// buildMoons creates one Moonraker client per configured printer, keyed by
-// printer ID. It must be rebuilt whenever the printer IDs change (e.g. after
-// pairing populates them), otherwise lookups by the real ID miss.
-func buildMoons(printers []config.MoonrakerPrinter) map[int]*moonraker.Client {
-	moons := make(map[int]*moonraker.Client, len(printers))
+// buildMoons creates one driver per configured printer, keyed by printer ID. It
+// must be rebuilt whenever the printer IDs change (e.g. after pairing populates
+// them), otherwise lookups by the real ID miss. Today every entry is a Moonraker
+// driver; dispatching on a per-printer protocol type is the next step.
+func buildMoons(printers []config.MoonrakerPrinter) map[int]driver.Driver {
+	moons := make(map[int]driver.Driver, len(printers))
 	for _, p := range printers {
 		moons[p.PrinterID] = moonraker.New(p.BaseURL, p.UIPort)
 	}
