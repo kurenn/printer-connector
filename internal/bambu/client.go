@@ -18,16 +18,17 @@ var ErrNotImplemented = errors.New("bambu driver: not implemented")
 
 // Client is a stub Bambu Lab driver.Driver implementation.
 type Client struct {
+	host       string
 	serial     string
 	accessCode string
 }
 
 var _ driver.Driver = (*Client)(nil)
 
-// New constructs a stub client. The real driver will use serial + accessCode to
-// authenticate the MQTT/TLS and FTPS sessions.
-func New(serial, accessCode string) *Client {
-	return &Client{serial: serial, accessCode: accessCode}
+// New constructs a stub client. The real driver will dial host over MQTT/TLS and
+// FTPS, authenticating with the printer's serial number and access code.
+func New(host, serial, accessCode string) *Client {
+	return &Client{host: host, serial: serial, accessCode: accessCode}
 }
 
 func (c *Client) Capabilities() []string {

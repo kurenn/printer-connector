@@ -11,8 +11,8 @@ func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 	now := time.Now().UTC()
 
 	var snaps []cloud.Snapshot
-	for _, p := range a.cfg.Moonraker {
-		mc := a.moons[p.PrinterID]
+	for _, p := range a.cfg.Printers {
+		mc := a.drivers[p.PrinterID]
 		if mc == nil {
 			continue
 		}

@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"printer-connector/internal/bambu"
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/config"
 	"printer-connector/internal/driver"
@@ -31,8 +32,8 @@ type Agent struct {
 	version string
 	once    bool
 
-	cloud *cloud.Client
-	moons map[int]driver.Driver
+	cloud   *cloud.Client
+	drivers map[int]driver.Driver
 
 	startedAt time.Time
 }
@@ -55,21 +56,26 @@ func New(opts Options) *Agent {
 		version:   opts.Version,
 		once:      opts.Once,
 		cloud:     cl,
-		moons:     buildMoons(opts.Config.Moonraker),
+		drivers:   buildDrivers(opts.Config.Printers),
 		startedAt: time.Now(),
 	}
 }
 
-// buildMoons creates one driver per configured printer, keyed by printer ID. It
-// must be rebuilt whenever the printer IDs change (e.g. after pairing populates
-// them), otherwise lookups by the real ID miss. Today every entry is a Moonraker
-// driver; dispatching on a per-printer protocol type is the next step.
-func buildMoons(printers []config.MoonrakerPrinter) map[int]driver.Driver {
-	moons := make(map[int]driver.Driver, len(printers))
+// buildDrivers creates one driver per configured printer, keyed by printer ID,
+// dispatching on the printer's protocol type. It must be rebuilt whenever the
+// printer IDs change (e.g. after pairing populates them), otherwise lookups by
+// the real ID miss. Config validation guarantees the type is one handled here.
+func buildDrivers(printers []config.Printer) map[int]driver.Driver {
+	drivers := make(map[int]driver.Driver, len(printers))
 	for _, p := range printers {
-		moons[p.PrinterID] = moonraker.New(p.BaseURL, p.UIPort)
+		switch p.Type {
+		case config.TypeBambu:
+			drivers[p.PrinterID] = bambu.New(p.Host, p.Serial, p.AccessCode)
+		default: // moonraker (the empty type defaults to moonraker in Load)
+			drivers[p.PrinterID] = moonraker.New(p.BaseURL, p.UIPort)
+		}
 	}
-	return moons
+	return drivers
 }
 
 func (a *Agent) Run(ctx context.Context) error {
@@ -82,7 +88,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	a.log.Info("connector running",
 		"connector_id", a.cfg.ConnectorID,
 		"cloud_url", a.cfg.CloudURL,
-		"printers", len(a.cfg.Moonraker),
+		"printers", len(a.cfg.Printers),
 	)
 
 	if a.once {
@@ -114,13 +120,13 @@ func (a *Agent) pair(ctx context.Context) error {
 	hostname, _ := os.Hostname()
 
 	var uiPort int
-	if len(a.cfg.Moonraker) > 0 {
-		uiPort = a.cfg.Moonraker[0].UIPort
+	if len(a.cfg.Printers) > 0 {
+		uiPort = a.cfg.Printers[0].UIPort
 	}
 
 	// Build printers array from moonraker config
-	printers := make([]cloud.PrinterInfo, 0, len(a.cfg.Moonraker))
-	for _, m := range a.cfg.Moonraker {
+	printers := make([]cloud.PrinterInfo, 0, len(a.cfg.Printers))
+	for _, m := range a.cfg.Printers {
 		printers = append(printers, cloud.PrinterInfo{
 			Name:   m.Name,
 			UIPort: m.UIPort,
@@ -162,10 +168,10 @@ func (a *Agent) pair(ctx context.Context) error {
 	if len(resp.Printers) > 0 {
 		for i, printer := range resp.Printers {
 			// Match by index (first printer in response -> first moonraker entry)
-			if i < len(a.cfg.Moonraker) {
-				a.cfg.Moonraker[i].PrinterID = printer.ID
+			if i < len(a.cfg.Printers) {
+				a.cfg.Printers[i].PrinterID = printer.ID
 				a.log.Info("mapped printer",
-					"moonraker_name", a.cfg.Moonraker[i].Name,
+					"moonraker_name", a.cfg.Printers[i].Name,
 					"printer_id", printer.ID,
 					"rails_name", printer.Name)
 			}
@@ -174,7 +180,7 @@ func (a *Agent) pair(ctx context.Context) error {
 		// Rebuild the Moonraker client map: it was keyed by the pre-pairing
 		// printer IDs (all 0), so without this the post-pairing loops would
 		// look up the real IDs and find nothing.
-		a.moons = buildMoons(a.cfg.Moonraker)
+		a.drivers = buildDrivers(a.cfg.Printers)
 	}
 
 	if err := config.SaveAtomic(a.cfgPath, a.cfg); err != nil {
@@ -337,7 +343,7 @@ func (a *Agent) processWebcamRequests(ctx context.Context) error {
 
 func (a *Agent) handleWebcamRequest(ctx context.Context, req cloud.WebcamRequest) error {
 	// Find the moonraker client for this printer
-	moon, ok := a.moons[req.PrinterID]
+	moon, ok := a.drivers[req.PrinterID]
 	if !ok {
 		return a.cloud.UploadWebcamSnapshot(ctx, req.ID, req.PrinterID, nil, "application/json")
 	}
