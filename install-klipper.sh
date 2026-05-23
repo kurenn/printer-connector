@@ -63,8 +63,7 @@ case "$ARCH" in
         BINARY_NAME="printer-connector-arm64"
         ;;
     x86_64|amd64)
-        warn "x86_64 detected - ARM64 binary may not work, consider manual installation"
-        BINARY_NAME="printer-connector-arm64"
+        BINARY_NAME="printer-connector-amd64"
         ;;
     *)
         error "Unsupported architecture: $ARCH"
@@ -126,9 +125,10 @@ mkdir -p "$INSTALL_DIR"
 mkdir -p "$STATE_DIR"
 success "Directories created"
 
-# Download binary
+# Download binary from the latest GitHub release (not raw/main — release assets
+# are the source of truth; see .github/workflows/release.yml).
 info "Downloading printer-connector binary..."
-BINARY_URL="https://github.com/$GITHUB_REPO/raw/main/$BINARY_NAME"
+BINARY_URL="https://github.com/$GITHUB_REPO/releases/latest/download/$BINARY_NAME"
 
 if command -v wget &> /dev/null; then
     wget --no-check-certificate -q -O "$BIN_FILE" "$BINARY_URL" || error "Failed to download binary"

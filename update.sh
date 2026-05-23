@@ -93,10 +93,10 @@ fi
 ARCH=$(uname -m)
 case "$ARCH" in
     aarch64|arm64)
-        BINARY_NAME="printer-connector-linux-arm64"
+        BINARY_NAME="printer-connector-arm64"
         ;;
     x86_64|amd64)
-        BINARY_NAME="printer-connector-linux-amd64"
+        BINARY_NAME="printer-connector-amd64"
         ;;
     mips)
         BINARY_NAME="printer-connector-mips"

@@ -116,7 +116,7 @@ else
     # Download from GitHub
     info "Downloading binary from GitHub..."
     
-    DOWNLOAD_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/printer-connector-mips"
+    DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/latest/download/printer-connector-mips"
     
     if wget --no-check-certificate -O "$BIN_FILE" "$DOWNLOAD_URL" 2>/dev/null; then
         # Check if download was successful (file size > 1MB)
