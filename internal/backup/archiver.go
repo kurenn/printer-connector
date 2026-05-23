@@ -103,27 +103,27 @@ func Create(opts Options) (*Result, error) {
 
 			// Validate path is within printer_data root (security check)
 			cleanPath := filepath.Clean(path)
-			if !strings.HasPrefix(cleanPath, cleanRoot) {
+			if !isWithinRoot(cleanPath, cleanRoot) {
 				return fmt.Errorf("path outside printer_data root: %s", path)
 			}
 
-			// Skip Helper-Script directory
+			// Skip the Helper-Script directory entirely.
 			if info.IsDir() && info.Name() == "Helper-Script" {
 				return filepath.SkipDir
 			}
 
-			// Skip directories (we only archive files)
-			if info.IsDir() {
+			// Only archive regular files. Skipping directories, symlinks, and
+			// device nodes also prevents following a symlink out of the root.
+			if !info.Mode().IsRegular() {
 				return nil
 			}
 
-			// Only include .cfg files
-			if !strings.HasSuffix(info.Name(), ".cfg") {
-				return nil
-			}
-
-			// Skip printer-*_*.cfg files (but keep printer.cfg)
-			if strings.HasPrefix(info.Name(), "printer-") && strings.Contains(info.Name(), "_") && info.Name() != "printer.cfg" {
+			// The config directory is filtered to Klipper/Moonraker .cfg files
+			// (excluding generated printer-<state>_<n>.cfg variants). The
+			// database, gcodes, and logs directories are archived in full so
+			// the include_* flags back up what they actually claim to — most
+			// importantly the database, which is requested by default.
+			if dir == "config" && !isBackupConfigFile(info.Name()) {
 				return nil
 			}
 
@@ -208,9 +208,27 @@ func Create(opts Options) (*Result, error) {
 	}, nil
 }
 
-// isWithinRoot checks if path is within root (security check)
+// isWithinRoot reports whether path is the root itself or lies beneath it.
+// The trailing separator guards against false positives such as
+// "/data/printer_database" matching the root "/data/printer_data".
 func isWithinRoot(path, root string) bool {
 	cleanPath := filepath.Clean(path)
 	cleanRoot := filepath.Clean(root)
-	return strings.HasPrefix(cleanPath, cleanRoot)
+	if cleanPath == cleanRoot {
+		return true
+	}
+	return strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator))
+}
+
+// isBackupConfigFile reports whether a file in the config directory should be
+// archived: any .cfg file except generated printer-<state>_<n>.cfg variants
+// (printer.cfg itself is always kept).
+func isBackupConfigFile(name string) bool {
+	if !strings.HasSuffix(name, ".cfg") {
+		return false
+	}
+	if strings.HasPrefix(name, "printer-") && strings.Contains(name, "_") && name != "printer.cfg" {
+		return false
+	}
+	return true
 }

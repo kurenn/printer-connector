@@ -12,6 +12,7 @@ import (
 	"printer-connector/internal/backup"
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/moonraker"
+	"printer-connector/internal/util"
 )
 
 func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
@@ -29,7 +30,7 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 
 		mc := a.moons[cmd.PrinterID]
 		if mc == nil {
-			_ = a.cloud.CompleteCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
+			a.completeCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
 				Status:       "failed",
 				ErrorMessage: fmt.Sprintf("unknown printer_id %d", cmd.PrinterID),
 				Result:       map[string]any{"printer_id": cmd.PrinterID},
@@ -87,7 +88,7 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 
 		if execErr != nil {
 			a.log.Warn("command failed", "command_id", cmd.ID, "error", execErr)
-			_ = a.cloud.CompleteCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
+			a.completeCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
 				Status:       "failed",
 				ErrorMessage: execErr.Error(),
 				Result:       result,
@@ -103,13 +104,41 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 		}
 
 		a.log.Info("command succeeded", "command_id", cmd.ID, "duration_ms", time.Since(start).Milliseconds())
-		_ = a.cloud.CompleteCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
+		a.completeCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
 			Status: "succeeded",
 			Result: result,
 		})
 	}
 
 	return nil
+}
+
+// completeCommand reports a command's outcome to the cloud, retrying a few
+// times with backoff. The cloud marks commands "running" when it hands them
+// out and only re-delivers "queued" ones, so a dropped completion would
+// otherwise strand the command in "running" forever — after its side effect
+// (delete, start_print, …) has already been applied locally. Retrying closes
+// that window for transient failures.
+func (a *Agent) completeCommand(ctx context.Context, id cloud.StringOrNumber, req cloud.CommandCompleteRequest) {
+	const maxAttempts = 3
+	bo := util.NewBackoff(500*time.Millisecond, 5*time.Second)
+
+	for attempt := 1; ; attempt++ {
+		if err := a.cloud.CompleteCommand(ctx, id, req); err == nil {
+			return
+		} else if attempt >= maxAttempts || ctx.Err() != nil {
+			a.log.Error("could not report command completion; command may be stuck in running",
+				"command_id", id, "status", req.Status, "attempts", attempt, "error", err)
+			return
+		} else {
+			a.log.Warn("retrying command completion", "command_id", id, "attempt", attempt, "error", err)
+		}
+
+		if err := util.Wait(ctx, bo.Next()); err != nil {
+			a.log.Error("aborting command completion retries", "command_id", id, "error", err)
+			return
+		}
+	}
 }
 
 func (a *Agent) executeUploadFile(ctx context.Context, mc *moonraker.Client, cmd cloud.Command, result map[string]any) error {
