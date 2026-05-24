@@ -8,8 +8,14 @@ type RegisterRequest struct {
 }
 
 type PrinterInfo struct {
-	Name   string `json:"name"`
-	UIPort int    `json:"ui_port,omitempty"`
+	Name string `json:"name"`
+	// Host + MoonrakerPort are the printer's real LAN address. Sending them lets
+	// Rails give each adopted printer a distinct identity — otherwise multiple
+	// printers on one connector all inherit the connector's IP and collide on
+	// the host:port uniqueness check.
+	Host          string `json:"host,omitempty"`
+	MoonrakerPort int    `json:"moonraker_port,omitempty"`
+	UIPort        int    `json:"ui_port,omitempty"`
 }
 
 type DeviceInfo struct {

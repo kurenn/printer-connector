@@ -5,8 +5,10 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"time"
 
 	"printer-connector/internal/bambu"
@@ -116,6 +118,22 @@ func (a *Agent) Run(ctx context.Context) error {
 	}
 }
 
+// hostPortFromBaseURL extracts host + port from a Moonraker base URL such as
+// "http://192.168.68.70:7125". Port defaults to 7125 when absent.
+func hostPortFromBaseURL(baseURL string) (string, int) {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" {
+		return "", 0
+	}
+	port := 7125
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err == nil {
+			port = n
+		}
+	}
+	return u.Hostname(), port
+}
+
 func (a *Agent) pair(ctx context.Context) error {
 	hostname, _ := os.Hostname()
 
@@ -124,12 +142,16 @@ func (a *Agent) pair(ctx context.Context) error {
 		uiPort = a.cfg.Printers[0].UIPort
 	}
 
-	// Build printers array from moonraker config
+	// Build printers array from config, including each printer's real LAN
+	// host:port so Rails can give them distinct identities.
 	printers := make([]cloud.PrinterInfo, 0, len(a.cfg.Printers))
 	for _, m := range a.cfg.Printers {
+		host, mport := hostPortFromBaseURL(m.BaseURL)
 		printers = append(printers, cloud.PrinterInfo{
-			Name:   m.Name,
-			UIPort: m.UIPort,
+			Name:          m.Name,
+			Host:          host,
+			MoonrakerPort: mport,
+			UIPort:        m.UIPort,
 		})
 	}
 
