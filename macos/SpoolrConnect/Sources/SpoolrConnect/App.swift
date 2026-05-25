@@ -145,8 +145,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.mainMenu = mainMenu
     }
 
-    /// SF Symbol stand-in for the Spoolr mark; production ships a template PDF.
-    private static func trayIcon() -> NSImage? {
-        NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "Spoolr Connect")
+    /// The Spoolr mark (ring + dot) drawn as a template image so macOS auto-tints
+    /// it for light/dark menu bars — matches the brand's monochrome compact mark.
+    private static func trayIcon() -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            let lineWidth: CGFloat = 2
+            let ring = NSBezierPath(ovalIn: rect.insetBy(dx: lineWidth / 2 + 1, dy: lineWidth / 2 + 1))
+            ring.lineWidth = lineWidth
+            NSColor.black.setStroke()
+            ring.stroke()
+            let r: CGFloat = 3
+            let dot = NSBezierPath(ovalIn: NSRect(x: rect.midX - r, y: rect.midY - r, width: r * 2, height: r * 2))
+            NSColor.black.setFill()
+            dot.fill()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 }
