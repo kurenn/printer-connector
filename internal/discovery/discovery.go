@@ -47,13 +47,17 @@ func Scan(ctx context.Context) Result {
 	}
 
 	res := Result{HostsTotal: len(targets), Subnets: subnets}
-	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	// Generous HTTP timeout so a busy printer (mid-print, slow to answer
+	// /printer/info) is still caught rather than skipped.
+	client := &http.Client{Timeout: 3 * time.Second}
 
 	var (
 		mu     sync.Mutex
 		wg     sync.WaitGroup
 		probed int
-		sem    = make(chan struct{}, 128) // bounded concurrency
+		// Lower concurrency avoids congesting small home networks (dropped SYNs
+		// → missed printers); a printer answers either way.
+		sem = make(chan struct{}, 64)
 	)
 
 	for _, ip := range targets {
@@ -72,7 +76,9 @@ func Scan(ctx context.Context) Result {
 			mu.Lock()
 			probed++
 			mu.Unlock()
-			if !tcpOpen(ip, MoonrakerPort, 250*time.Millisecond) {
+			// Generous TCP accept window so a busy/slow printer isn't skipped
+			// before we even try its HTTP API.
+			if !tcpOpen(ip, MoonrakerPort, 800*time.Millisecond) {
 				return
 			}
 			if p, ok := probeMoonraker(ctx, client, ip, MoonrakerPort); ok {

@@ -7,7 +7,7 @@ enum RegisterService {
     struct Linked: Decodable {
         let id: Int
         let name: String
-        let host: String
+        let host: String?
     }
 
     struct Payload: Decodable {
