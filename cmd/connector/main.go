@@ -135,19 +135,33 @@ func runRegister() {
 		cfg.PushSnapshotsSeconds = resp.Polling.SnapshotsSeconds
 	}
 
-	out := make([]map[string]any, 0, len(found.Printers))
-	for i, p := range found.Printers {
-		id := 0
-		if i < len(resp.Printers) {
-			id = resp.Printers[i].ID
+	// Report only what Rails actually created/adopted. Printers it skipped
+	// (e.g. already owned by another workspace) must NOT be reported as linked.
+	// Map the returned ids back onto our config by name.
+	byName := make(map[string]int, len(resp.Printers))
+	for _, rp := range resp.Printers {
+		byName[rp.Name] = rp.ID
+	}
+	for i := range cfg.Printers {
+		if id, ok := byName[cfg.Printers[i].Name]; ok {
 			cfg.Printers[i].PrinterID = id
 		}
-		out = append(out, map[string]any{"id": id, "name": p.Name, "host": p.Host})
 	}
 
 	_ = os.MkdirAll(filepath.Dir(cfgPath), 0o755)
 	if err := config.SaveAtomic(cfgPath, cfg); err != nil {
 		emitErr("saving config failed: " + err.Error())
+	}
+
+	if len(resp.Printers) == 0 {
+		emitErr(fmt.Sprintf(
+			"discovered %d printer(s) but none were linked — they may already belong to another Spoolr workspace",
+			len(found.Printers)))
+	}
+
+	out := make([]map[string]any, 0, len(resp.Printers))
+	for _, rp := range resp.Printers {
+		out = append(out, map[string]any{"id": rp.ID, "name": rp.Name})
 	}
 
 	enc := json.NewEncoder(os.Stdout)
