@@ -34,7 +34,9 @@ enum DiscoveryService {
         Bundle.main.url(forResource: "printer-connector", withExtension: nil)
     }
 
-    static func scan(completion: @escaping (Result<Payload, Error>) -> Void) {
+    /// `bambuOnly` skips the Moonraker /24 sweep — a fast opt-in SSDP probe so
+    /// the common Klipper flow isn't slowed by a Bambu scan it doesn't need.
+    static func scan(bambuOnly: Bool = false, completion: @escaping (Result<Payload, Error>) -> Void) {
         guard let bin = helperURL() else {
             completion(.failure(DiscoveryError.helperNotFound))
             return
@@ -42,7 +44,7 @@ enum DiscoveryService {
         DispatchQueue.global(qos: .userInitiated).async {
             let proc = Process()
             proc.executableURL = bin
-            proc.arguments = ["discover"]
+            proc.arguments = bambuOnly ? ["discover", "--bambu-only"] : ["discover"]
             let out = Pipe()
             proc.standardOutput = out
             proc.standardError = Pipe()

@@ -37,6 +37,13 @@ func (b *bambuFlag) Set(v string) error {
 // beacons, printing both as JSON. Standalone (no --config); powers the menubar
 // app's "Scan network" flow.
 func runDiscover() {
+	bambuOnly := false
+	for _, a := range os.Args[2:] {
+		if a == "--bambu-only" {
+			bambuOnly = true
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -45,10 +52,23 @@ func runDiscover() {
 		bambu []discovery.BambuPrinter
 		wg    sync.WaitGroup
 	)
-	wg.Add(2)
-	go func() { defer wg.Done(); moon = discovery.Scan(ctx) }()
-	go func() { defer wg.Done(); bambu = discovery.ScanBambu(ctx, 4*time.Second) }()
-	wg.Wait()
+	if bambuOnly {
+		// SSDP-only: skip the Moonraker /24 sweep (used as a fast opt-in probe
+		// so the common Klipper flow isn't slowed by a Bambu scan it doesn't need).
+		bambu = discovery.ScanBambu(ctx, 4*time.Second)
+	} else {
+		wg.Add(2)
+		go func() { defer wg.Done(); moon = discovery.Scan(ctx) }()
+		go func() { defer wg.Done(); bambu = discovery.ScanBambu(ctx, 4*time.Second) }()
+		wg.Wait()
+	}
+
+	// Always emit a non-nil printers array (the menubar app decodes it as a
+	// required field; a null in --bambu-only mode would fail the decode).
+	moonPrinters := moon.Printers
+	if moonPrinters == nil {
+		moonPrinters = []discovery.Printer{}
+	}
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -56,7 +76,7 @@ func runDiscover() {
 		"hosts_total":  moon.HostsTotal,
 		"hosts_probed": moon.HostsProbed,
 		"subnets":      moon.Subnets,
-		"printers":     moon.Printers,
+		"printers":     moonPrinters,
 		"bambu":        bambu, // need a user-entered access code before pairing
 	})
 }

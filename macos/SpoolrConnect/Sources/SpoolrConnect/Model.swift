@@ -97,7 +97,10 @@ final class FleetModel: ObservableObject {
     @Published var linkError: String?
     @Published var linkedPrinters: [Printer] = []
 
-    // Bambu onboarding: SSDP-found printers awaiting a user-entered access code.
+    // Bambu onboarding: opt-in (the SSDP scan only runs when the user has Bambu
+    // printers, so the common Klipper flow isn't slowed). SSDP-found printers
+    // await a user-entered access code.
+    @Published var includeBambu = false
     @Published var bambuDiscovered: [BambuDevice] = []
 
     // Attention Mode group expansion (collapsed by default).
@@ -166,7 +169,15 @@ final class FleetModel: ObservableObject {
         guard !trimmed.isEmpty else { linkError = "Enter your pairing code."; return }
         linkError = nil
         state = .linking
-        DiscoveryService.scan { [weak self] result in
+
+        // Default (Klipper) path: register straight away — no Bambu pre-scan, so
+        // no regression. Only when the user opts in do we SSDP-probe for Bambu.
+        guard includeBambu else {
+            runRegister(bambu: [])
+            return
+        }
+
+        DiscoveryService.scan(bambuOnly: true) { [weak self] result in
             guard let self else { return }
             let bambu: [BambuDevice]
             switch result {
