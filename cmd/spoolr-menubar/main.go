@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -29,6 +30,13 @@ import (
 )
 
 var version = "0.1.0"
+
+// menuIcon is a compact monochrome template icon for the menu bar. A small icon
+// keeps the footprint tiny (text titles get clipped behind the notch on a
+// crowded menu bar). macOS tints the template for light/dark automatically.
+//
+//go:embed icon.png
+var menuIcon []byte
 
 // maxPrinterRows caps the printer rows pre-allocated in the menu. systray builds
 // its menu once, so we add a hidden pool up front and show/populate it as
@@ -202,7 +210,8 @@ type menubar struct {
 }
 
 func (m *menubar) onReady() {
-	systray.SetTitle("Spoolr")
+	systray.SetTemplateIcon(menuIcon, menuIcon)
+	systray.SetTitle("")
 	systray.SetTooltip("Spoolr Connect")
 
 	m.statusItem = systray.AddMenuItem("…", "Connector status")

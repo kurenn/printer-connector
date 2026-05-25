@@ -44,8 +44,11 @@ echo "Installed: $APP"
 #    right-click→Open dance.
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 
-# 4. Launch at login via a per-user LaunchAgent (runs in the GUI session so the
-#    menubar shows). RunAtLoad starts it at login; no KeepAlive so Quit sticks.
+# 4. Launch exactly one instance.
+#    With launch-at-login, a per-user LaunchAgent runs `open -a` so the bundle's
+#    LSUIElement is honored (menubar-only, no Dock icon) and RunAtLoad launches
+#    it immediately — so we must NOT also `open` it here, or we'd get duplicate
+#    menu-bar items. Without login, we just open it directly.
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 if [ "$LOGIN" = "1" ]; then
   mkdir -p "$HOME/Library/LaunchAgents"
@@ -56,18 +59,22 @@ if [ "$LOGIN" = "1" ]; then
 <dict>
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
-  <array><string>$APP/Contents/MacOS/spoolr-menubar</string></array>
+  <array>
+    <string>/usr/bin/open</string>
+    <string>-a</string>
+    <string>$APP</string>
+  </array>
   <key>RunAtLoad</key><true/>
   <key>ProcessType</key><string>Interactive</string>
 </dict>
 </plist>
 PL
   launchctl unload "$PLIST" 2>/dev/null || true
-  launchctl load "$PLIST"
+  launchctl load "$PLIST" # RunAtLoad → open -a → launches now (single instance)
   echo "Launch-at-login enabled ($PLIST). Remove that file to disable."
+else
+  open "$APP"
 fi
 
-# 5. Open it now.
-open "$APP"
 echo
-echo "Done. Look for 'Spoolr' in your menu bar, then 'Set up Spoolr Connect…' to pair."
+echo "Done. Look for the Spoolr ring icon in your menu bar, then 'Set up Spoolr Connect…' to pair."
