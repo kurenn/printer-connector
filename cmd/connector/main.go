@@ -90,7 +90,12 @@ func runRegister() {
 			BaseURL: fmt.Sprintf("http://%s:%d", p.Host, p.Port),
 			UIPort:  80,
 		})
-		regPrinters = append(regPrinters, cloud.PrinterInfo{Name: p.Name, UIPort: 80})
+		regPrinters = append(regPrinters, cloud.PrinterInfo{
+			Name:          p.Name,
+			Host:          p.Host,
+			MoonrakerPort: p.Port,
+			UIPort:        80,
+		})
 	}
 
 	hostname, _ := os.Hostname()
