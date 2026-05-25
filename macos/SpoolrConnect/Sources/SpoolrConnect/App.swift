@@ -47,6 +47,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
             button.toolTip = "Spoolr Connect"
         }
+
+        // If a connector.json already exists (previously paired), run the agent
+        // so telemetry keeps flowing while the app is open.
+        if FileManager.default.fileExists(atPath: AgentService.configPath()) {
+            AgentService.start()
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        AgentService.stop()
     }
 
     @objc private func togglePopover(_ sender: Any?) {

@@ -55,8 +55,10 @@ struct PairStep: Identifiable, Equatable {
 enum PopoverState: Equatable {
     case attention   // home (Attention Mode)
     case empty       // linked, 0 printers
-    case scanning    // discovery in progress
-    case pairing     // handshake with a discovered printer
+    case tokenEntry  // paste a pairing code (token → register all)
+    case scanning    // per-printer discovery in progress
+    case linking     // discovering + registering all under a token
+    case pairing     // handshake with a single discovered printer
     case justPaired  // success, auto-times-out back to attention
 }
 
@@ -77,6 +79,11 @@ final class FleetModel: ObservableObject {
     @Published var pairingTarget: DiscoveredPrinter?
     @Published var pairSteps: [PairStep] = []
     @Published var justPairedPrinter: Printer?
+
+    // Token-based "register everything" flow.
+    @Published var token: String = ""
+    @Published var linkError: String?
+    @Published var linkedPrinters: [Printer] = []
 
     // Attention Mode group expansion (collapsed by default).
     @Published var idleExpanded = false
@@ -129,6 +136,41 @@ final class FleetModel: ObservableObject {
     // MARK: State machine (handoff §"State machine")
     // Driven by user intent here; in production the agent stream decides which
     // view to show. These also document the legal transitions.
+
+    func showTokenEntry() {
+        linkError = nil
+        state = .tokenEntry
+    }
+
+    /// The "previous" flow: paste a pairing code → the connector discovers every
+    /// Moonraker printer on the LAN and registers them all under that token →
+    /// the web UI updates. Drives the `connector register` helper.
+    func register() {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { linkError = "Enter your pairing code."; return }
+        linkError = nil
+        state = .linking
+        RegisterService.register(token: trimmed) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let payload):
+                let linked = (payload.printers ?? []).map { p in
+                    Printer(id: "\(p.id)", name: p.name, kind: .klipper, state: .idle, temp: "—")
+                }
+                self.linkedPrinters = linked
+                self.printers = linked
+                self.token = ""
+                self.state = .justPaired
+                // (Re)start the agent so the newly-registered printers push
+                // telemetry → the web UI shows them online (parity with the
+                // original connector). Restart picks up the rewritten config.
+                AgentService.restart()
+            case .failure(let err):
+                self.linkError = err.localizedDescription
+                self.state = .tokenEntry
+            }
+        }
+    }
 
     func beginScan() {
         state = .scanning
@@ -199,6 +241,7 @@ final class FleetModel: ObservableObject {
     func dismissJustPaired() {
         justPairedPrinter = nil
         pairingTarget = nil
+        linkedPrinters = []
         state = .attention
     }
 

@@ -26,7 +26,9 @@ struct RootView: View {
         switch model.state {
         case .attention:  AttentionModeView()
         case .empty:      EmptyStateView()
+        case .tokenEntry: TokenEntryView()
         case .scanning:   ScanningView()
+        case .linking:    LinkingView()
         case .pairing:    PairingView()
         case .justPaired: JustPairedView()
         }
