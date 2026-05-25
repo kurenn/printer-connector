@@ -91,7 +91,7 @@ func Load(path string) (*Config, error) {
 		c.HeartbeatSeconds = 10
 	}
 	if c.StateDir == "" {
-		c.StateDir = "/var/lib/printer-connector"
+		c.StateDir = defaultStateDir(path)
 	}
 
 	c.migrateLegacy()
@@ -106,6 +106,20 @@ func Load(path string) (*Config, error) {
 	}
 
 	return &c, nil
+}
+
+// defaultStateDir picks a writable state directory. A root process (the systemd
+// service) uses the system path; a non-root run (manual / dev / menubar app)
+// keeps state next to the config file, which is writable by whoever installed
+// it — this avoids "mkdir /var/lib/printer-connector: permission denied".
+func defaultStateDir(configPath string) string {
+	if os.Geteuid() == 0 {
+		return "/var/lib/printer-connector"
+	}
+	if configPath != "" {
+		return filepath.Join(filepath.Dir(configPath), "state")
+	}
+	return "/var/lib/printer-connector"
 }
 
 // migrateLegacy folds the deprecated "moonraker" list into Printers. Idempotent:
