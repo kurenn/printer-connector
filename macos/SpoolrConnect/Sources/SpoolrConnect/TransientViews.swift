@@ -416,6 +416,13 @@ struct TokenEntryView: View {
                         .multilineTextAlignment(.center).padding(.top, 8)
                 }
 
+                Toggle(isOn: $model.includeBambu) {
+                    Text("I have Bambu Lab printers")
+                        .font(Theme.sans(11.5)).foregroundColor(Theme.text2)
+                }
+                .toggleStyle(.checkbox)
+                .padding(.top, 12)
+
                 AccentFillButton(title: "Connect") { model.register() }.padding(.top, 10)
                 Button("Scan this network instead") { model.beginScan() }.buttonStyle(.plain)
                     .font(Theme.sans(11.5)).foregroundColor(Theme.text2).padding(.vertical, 7)
@@ -476,6 +483,63 @@ private struct SuccessRing: View {
         .opacity(popped ? 1 : (reduceMotion ? 1 : 0))
         .onAppear {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.55)) { popped = true }
+        }
+    }
+}
+
+// MARK: - Bambu credentials (access code per discovered Bambu printer)
+
+struct BambuCredentialsView: View {
+    @EnvironmentObject var model: FleetModel
+
+    private var ready: Bool { model.bambuDiscovered.allSatisfy { !$0.accessCode.isEmpty } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            BrandHeader(title: "Bambu printers", subtitle: "Enter each access code") {
+                HeaderLink(label: "Cancel") { model.backToAttention() }
+            }
+
+            Text("Found \(model.bambuDiscovered.count) Bambu printer\(model.bambuDiscovered.count == 1 ? "" : "s"). The LAN access code is on the printer screen → Settings → Network.")
+                .font(Theme.sans(11.5)).foregroundColor(Theme.text3)
+                .multilineTextAlignment(.center).lineSpacing(2)
+                .padding(.horizontal, 22).padding(.top, 4).padding(.bottom, 10)
+
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach($model.bambuDiscovered) { $device in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "cube.box").font(.system(size: 13)).foregroundColor(Theme.accent)
+                                    .frame(width: 18, height: 18)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(device.name).font(Theme.sans(13, weight: .medium)).foregroundColor(Theme.text1)
+                                    Text("\(device.model) · \(device.host)").font(Theme.mono(11)).foregroundColor(Theme.text3)
+                                }
+                            }
+                            TextField("access code", text: $device.accessCode)
+                                .textFieldStyle(.plain).font(Theme.mono(13)).foregroundColor(Theme.text1)
+                                .padding(.vertical, 7).padding(.horizontal, 10)
+                                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.surface2))
+                                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 0.5))
+                        }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: Theme.radiusRow, style: .continuous).fill(Theme.accent.opacity(0.04)))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.radiusRow, style: .continuous)
+                            .stroke(Theme.accent.opacity(0.16), lineWidth: 0.5))
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .frame(maxHeight: 240)
+
+            AccentFillButton(title: "Link printers") { model.confirmBambuAndRegister() }
+                .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 16)
+                .opacity(ready ? 1 : 0.5)
+                .disabled(!ready)
+
+            FootStrip(left: "v\(model.version) · pairing", rightLabel: "")
         }
     }
 }

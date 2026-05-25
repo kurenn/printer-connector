@@ -29,6 +29,7 @@ struct RootView: View {
         case .tokenEntry: TokenEntryView()
         case .scanning:   ScanningView()
         case .linking:    LinkingView()
+        case .bambuCredentials: BambuCredentialsView()
         case .pairing:    PairingView()
         case .justPaired: JustPairedView()
         }

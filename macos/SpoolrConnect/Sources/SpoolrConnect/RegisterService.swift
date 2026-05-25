@@ -29,15 +29,23 @@ enum RegisterService {
         }
     }
 
-    static func register(token: String, completion: @escaping (Result<Payload, Error>) -> Void) {
+    static func register(token: String,
+                         bambu: [BambuDevice] = [],
+                         completion: @escaping (Result<Payload, Error>) -> Void) {
         guard let bin = DiscoveryService.helperURL() else {
             completion(.failure(RegisterError.helperNotFound))
             return
         }
+        var args = ["register", "--token", token]
+        // Each Bambu printer carries its user-entered access code; creds stay on
+        // the connector (--bambu "host,serial,accesscode,name").
+        for b in bambu where !b.accessCode.isEmpty {
+            args += ["--bambu", "\(b.host),\(b.serial),\(b.accessCode),\(b.name)"]
+        }
         DispatchQueue.global(qos: .userInitiated).async {
             let proc = Process()
             proc.executableURL = bin
-            proc.arguments = ["register", "--token", token]
+            proc.arguments = args
             let out = Pipe()
             proc.standardOutput = out
             proc.standardError = Pipe()

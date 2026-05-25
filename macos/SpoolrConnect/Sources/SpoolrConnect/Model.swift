@@ -57,9 +57,21 @@ enum PopoverState: Equatable {
     case empty       // linked, 0 printers
     case tokenEntry  // paste a pairing code (token → register all)
     case scanning    // per-printer discovery in progress
-    case linking     // discovering + registering all under a token
-    case pairing     // handshake with a single discovered printer
-    case justPaired  // success, auto-times-out back to attention
+    case linking         // discovering + registering all under a token
+    case bambuCredentials // enter access codes for discovered Bambu printers
+    case pairing         // handshake with a single discovered printer
+    case justPaired      // success, auto-times-out back to attention
+}
+
+/// A Bambu printer found via SSDP. The access code can't be discovered — the
+/// user reads it off the printer's screen — so it's collected separately.
+struct BambuDevice: Identifiable, Equatable {
+    var id: String { serial }
+    var host: String
+    var serial: String
+    var model: String
+    var name: String
+    var accessCode: String = ""
 }
 
 // MARK: - Fleet model
@@ -84,6 +96,12 @@ final class FleetModel: ObservableObject {
     @Published var token: String = ""
     @Published var linkError: String?
     @Published var linkedPrinters: [Printer] = []
+
+    // Bambu onboarding: opt-in (the SSDP scan only runs when the user has Bambu
+    // printers, so the common Klipper flow isn't slowed). SSDP-found printers
+    // await a user-entered access code.
+    @Published var includeBambu = false
+    @Published var bambuDiscovered: [BambuDevice] = []
 
     // Attention Mode group expansion (collapsed by default).
     @Published var idleExpanded = false
@@ -142,15 +160,52 @@ final class FleetModel: ObservableObject {
         state = .tokenEntry
     }
 
-    /// The "previous" flow: paste a pairing code → the connector discovers every
-    /// Moonraker printer on the LAN and registers them all under that token →
-    /// the web UI updates. Drives the `connector register` helper.
+    /// Paste a pairing code → discover the LAN → register everything under that
+    /// token → the web UI updates. Bambu printers (found via SSDP) need a
+    /// user-entered access code first, so we discover up front and branch to the
+    /// credentials step before the single register call.
     func register() {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { linkError = "Enter your pairing code."; return }
         linkError = nil
         state = .linking
-        RegisterService.register(token: trimmed) { [weak self] result in
+
+        // Default (Klipper) path: register straight away — no Bambu pre-scan, so
+        // no regression. Only when the user opts in do we SSDP-probe for Bambu.
+        guard includeBambu else {
+            runRegister(bambu: [])
+            return
+        }
+
+        DiscoveryService.scan(bambuOnly: true) { [weak self] result in
+            guard let self else { return }
+            let bambu: [BambuDevice]
+            switch result {
+            case .success(let payload):
+                bambu = (payload.bambu ?? []).map {
+                    BambuDevice(host: $0.host, serial: $0.serial, model: $0.model, name: $0.name)
+                }
+            case .failure:
+                bambu = [] // helper missing / no Bambu — go straight to register
+            }
+            if bambu.isEmpty {
+                self.runRegister(bambu: [])
+            } else {
+                self.bambuDiscovered = bambu
+                self.state = .bambuCredentials
+            }
+        }
+    }
+
+    /// Submit the entered Bambu access codes, then register everything.
+    func confirmBambuAndRegister() {
+        state = .linking
+        runRegister(bambu: bambuDiscovered)
+    }
+
+    private func runRegister(bambu: [BambuDevice]) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        RegisterService.register(token: trimmed, bambu: bambu) { [weak self] result in
             guard let self else { return }
             switch result {
             case .success(let payload):
@@ -160,10 +215,10 @@ final class FleetModel: ObservableObject {
                 self.linkedPrinters = linked
                 self.printers = linked
                 self.token = ""
+                self.bambuDiscovered = []
                 self.state = .justPaired
-                // (Re)start the agent so the newly-registered printers push
-                // telemetry → the web UI shows them online (parity with the
-                // original connector). Restart picks up the rewritten config.
+                // (Re)start the agent so the printers push telemetry → the web
+                // UI shows them online. Restart picks up the rewritten config.
                 AgentService.restart()
             case .failure(let err):
                 self.linkError = err.localizedDescription

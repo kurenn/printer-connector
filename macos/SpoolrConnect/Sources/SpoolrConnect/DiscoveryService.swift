@@ -13,10 +13,18 @@ enum DiscoveryService {
         let detail: String
     }
 
+    struct BambuHit: Decodable {
+        let host: String
+        let serial: String
+        let model: String
+        let name: String
+    }
+
     struct Payload: Decodable {
         let hosts_total: Int
         let hosts_probed: Int
         let printers: [Hit]
+        let bambu: [BambuHit]?
     }
 
     enum DiscoveryError: Error { case helperNotFound }
@@ -26,7 +34,9 @@ enum DiscoveryService {
         Bundle.main.url(forResource: "printer-connector", withExtension: nil)
     }
 
-    static func scan(completion: @escaping (Result<Payload, Error>) -> Void) {
+    /// `bambuOnly` skips the Moonraker /24 sweep — a fast opt-in SSDP probe so
+    /// the common Klipper flow isn't slowed by a Bambu scan it doesn't need.
+    static func scan(bambuOnly: Bool = false, completion: @escaping (Result<Payload, Error>) -> Void) {
         guard let bin = helperURL() else {
             completion(.failure(DiscoveryError.helperNotFound))
             return
@@ -34,7 +44,7 @@ enum DiscoveryService {
         DispatchQueue.global(qos: .userInitiated).async {
             let proc = Process()
             proc.executableURL = bin
-            proc.arguments = ["discover"]
+            proc.arguments = bambuOnly ? ["discover", "--bambu-only"] : ["discover"]
             let out = Pipe()
             proc.standardOutput = out
             proc.standardError = Pipe()
