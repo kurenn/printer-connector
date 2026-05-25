@@ -12,11 +12,11 @@ type PrinterInfo struct {
 	// Type is the protocol/driver ("moonraker", "bambu", …) so the cloud creates
 	// the printer with the right printer_type instead of defaulting to moonraker.
 	Type string `json:"type,omitempty"`
-	// Host is the printer's LAN address. Bambu printers carry their own host;
-	// Moonraker printers leave it empty and the cloud falls back to the
-	// connector's IP. Credentials (access code, serial) stay on the connector.
-	Host   string `json:"host,omitempty"`
-	UIPort int    `json:"ui_port,omitempty"`
+	// Host is the printer's LAN address — Bambu printers carry their own; Moonraker
+	// printers report theirs from discovery. Credentials stay on the connector.
+	Host          string `json:"host,omitempty"`
+	MoonrakerPort int    `json:"moonraker_port,omitempty"`
+	UIPort        int    `json:"ui_port,omitempty"`
 }
 
 type DeviceInfo struct {
