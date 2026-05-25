@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"printer-connector/internal/backup"
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/driver"
+	"printer-connector/internal/moonraker"
 	"printer-connector/internal/util"
 )
 
@@ -239,66 +240,44 @@ func (a *Agent) executeCreateBackup(ctx context.Context, cmd cloud.Command, resu
 		return fmt.Errorf("missing params.presigned_url")
 	}
 
-	// Get printer_data root (default: /usr/data/printer_data for K1, ~/printer_data for others)
-	printerDataRoot := "/usr/data/printer_data"
-	if home := os.Getenv("HOME"); home != "" && home != "/root" {
-		printerDataRoot = home + "/printer_data"
-	}
-	if override, ok := cmd.Params["printer_data_root"].(string); ok && override != "" {
-		printerDataRoot = override
-		// Expand tilde if present - use K1 path for root user, otherwise HOME
-		if strings.HasPrefix(printerDataRoot, "~/") {
-			home := os.Getenv("HOME")
-			if home == "/root" {
-				// K1 Max: use /usr/data/printer_data even if ~/printer_data is specified
-				printerDataRoot = filepath.Join("/usr/data", printerDataRoot[2:])
-			} else if home != "" {
-				printerDataRoot = filepath.Join(home, printerDataRoot[2:])
-			}
-		}
+	// Backups pull the printer's files over Moonraker's file API, so the
+	// connector does NOT need to run on the printer. Other driver types (Bambu)
+	// don't expose this yet.
+	mc, ok := a.drivers[cmd.PrinterID].(*moonraker.Client)
+	if !ok {
+		return fmt.Errorf("remote backup is only supported for Moonraker printers (printer_id %d)", cmd.PrinterID)
 	}
 
-	// Parse include options (default all to false)
+	// Parse include options (default all to false). include.database is accepted
+	// but not fetched over Moonraker (the DB isn't a file-manager root).
 	includeMap, _ := cmd.Params["include"].(map[string]any)
 	includeConfig, _ := includeMap["config"].(bool)
-	includeDatabase, _ := includeMap["database"].(bool)
 	includeGcodes, _ := includeMap["gcodes"].(bool)
 	includeLogs, _ := includeMap["logs"].(bool)
 
-	// Ensure at least one directory is included
-	if !includeConfig && !includeDatabase && !includeGcodes && !includeLogs {
-		return fmt.Errorf("no directories selected for backup")
+	if !includeConfig && !includeGcodes && !includeLogs {
+		return fmt.Errorf("no fetchable directories selected for backup (config/gcodes/logs)")
 	}
 
-	// Create output path in state directory
-	outputPath := filepath.Join(a.cfg.StateDir, backupID+".tar.gz")
+	// Stage + archive in the OS temp dir — transient, and writable for any user
+	// (no dependency on a system state directory).
+	outputPath := filepath.Join(os.TempDir(), "spoolr-backup-"+backupID+".tar.gz")
 
-	// Ensure state directory exists
-	if err := os.MkdirAll(a.cfg.StateDir, 0755); err != nil {
-		return fmt.Errorf("failed to create state directory: %w", err)
-	}
-
-	a.log.Info("creating backup",
+	a.log.Info("creating backup over moonraker",
 		"backup_id", backupID,
-		"printer_data_root", printerDataRoot,
+		"printer_id", cmd.PrinterID,
 		"include_config", includeConfig,
-		"include_database", includeDatabase,
 		"include_gcodes", includeGcodes,
 		"include_logs", includeLogs,
 	)
 
-	// Create backup archive
-	opts := backup.Options{
-		PrinterDataRoot: printerDataRoot,
-		IncludeConfig:   includeConfig,
-		IncludeDatabase: includeDatabase,
-		IncludeGcodes:   includeGcodes,
-		IncludeLogs:     includeLogs,
-		OutputPath:      outputPath,
-		MaxSizeBytes:    10 << 30, // 10GB limit
-	}
-
-	backupResult, err := backup.Create(opts)
+	backupResult, err := backup.FetchAndCreate(ctx, moonrakerFetcher{mc: mc}, backup.Options{
+		IncludeConfig: includeConfig,
+		IncludeGcodes: includeGcodes,
+		IncludeLogs:   includeLogs,
+		OutputPath:    outputPath,
+		MaxSizeBytes:  10 << 30, // 10GB limit
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create backup: %w", err)
 	}
@@ -330,4 +309,23 @@ func (a *Agent) executeCreateBackup(ctx context.Context, cmd cloud.Command, resu
 	result["uploaded_at"] = time.Now().UTC().Format(time.RFC3339)
 
 	return nil
+}
+
+// moonrakerFetcher adapts a *moonraker.Client to backup.Fetcher.
+type moonrakerFetcher struct{ mc *moonraker.Client }
+
+func (m moonrakerFetcher) ListFiles(ctx context.Context, root string) ([]backup.RemoteFile, error) {
+	entries, err := m.mc.ListRootFiles(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	files := make([]backup.RemoteFile, len(entries))
+	for i, e := range entries {
+		files[i] = backup.RemoteFile{Path: e.Path, Size: e.Size}
+	}
+	return files, nil
+}
+
+func (m moonrakerFetcher) DownloadFile(ctx context.Context, root, path string, w io.Writer) error {
+	return m.mc.DownloadFile(ctx, root, path, w)
 }
