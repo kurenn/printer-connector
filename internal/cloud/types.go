@@ -8,8 +8,10 @@ type RegisterRequest struct {
 }
 
 type PrinterInfo struct {
-	Name   string `json:"name"`
-	UIPort int    `json:"ui_port,omitempty"`
+	Name          string `json:"name"`
+	Host          string `json:"host,omitempty"`
+	MoonrakerPort int    `json:"moonraker_port,omitempty"`
+	UIPort        int    `json:"ui_port,omitempty"`
 }
 
 type DeviceInfo struct {
