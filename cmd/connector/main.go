@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"printer-connector/internal/agent"
 	"printer-connector/internal/config"
 	"printer-connector/internal/discovery"
+	"printer-connector/internal/setup"
 )
 
 var version = "0.1.0"
@@ -185,8 +185,6 @@ func runSetup(args []string) {
 	fs.IntVar(&port, "port", discovery.DefaultPort, "Moonraker port to probe")
 	_ = fs.Parse(args)
 
-	logger := newLogger(slog.LevelInfo)
-
 	if token == "" {
 		fmt.Fprintln(os.Stderr, "error: --token is required (get it from the Spoolr app → Add printer)")
 		os.Exit(2)
@@ -195,74 +193,27 @@ func runSetup(args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	fmt.Println("Scanning your network for printers…")
-	found, err := discovery.Scan(ctx, discovery.Options{Port: port})
+	found, final, err := setup.Run(ctx, setup.Options{
+		Token:      token,
+		CloudURL:   cloudURL,
+		ConfigPath: cfgPath,
+		Site:       site,
+		Port:       port,
+		Version:    version,
+		Logger:     newLogger(slog.LevelInfo),
+		Progress:   func(s string) { fmt.Println(s) },
+	})
 	if err != nil {
-		logger.Error("discovery failed", "error", err)
-		os.Exit(1)
-	}
-	if len(found) == 0 {
-		fmt.Println("No printers found. Make sure they're powered on and on this network (try --port if Moonraker runs elsewhere).")
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Found %d printer(s):\n", len(found))
-	printers := make([]config.Printer, 0, len(found))
 	for _, p := range found {
 		name := p.Hostname
 		if name == "" {
 			name = p.IP
 		}
 		fmt.Printf("  • %s (%s) — %s\n", name, p.IP, p.State)
-		printers = append(printers, config.Printer{
-			Type:    config.TypeMoonraker,
-			Name:    name,
-			BaseURL: p.BaseURL,
-			UIPort:  80,
-		})
-	}
-
-	cloud := cloudURL
-	if cloud == "" {
-		cloud = os.Getenv("CLOUD_URL")
-	}
-	if cloud == "" {
-		cloud = config.DefaultCloudURL
-	}
-
-	cfg := &config.Config{
-		CloudURL:     cloud,
-		PairingToken: token,
-		SiteName:     site,
-		StateDir:     filepath.Join(filepath.Dir(cfgPath), "state"),
-		Printers:     printers,
-	}
-	if err := cfg.Validate(); err != nil {
-		logger.Error("invalid config", "error", err)
-		os.Exit(1)
-	}
-	if err := config.SaveAtomic(cfgPath, cfg); err != nil {
-		logger.Error("could not write config", "error", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("\nPairing with Spoolr and adopting printers…")
-	a := agent.New(agent.Options{
-		ConfigPath: cfgPath,
-		Config:     cfg,
-		Logger:     logger,
-		Version:    version,
-		Once:       true,
-	})
-	if err := a.Run(ctx); err != nil {
-		logger.Error("pairing failed", "error", err)
-		os.Exit(1)
-	}
-
-	final, err := config.Load(cfgPath)
-	if err != nil {
-		logger.Error("paired but could not re-read config", "error", err)
-		os.Exit(1)
 	}
 	fmt.Printf("\n✅ Done — adopted %d printer(s):\n", len(final.Printers))
 	for _, p := range final.Printers {
