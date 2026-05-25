@@ -129,6 +129,8 @@ func (a *Agent) pair(ctx context.Context) error {
 	for _, m := range a.cfg.Printers {
 		printers = append(printers, cloud.PrinterInfo{
 			Name:   m.Name,
+			Type:   m.Type, // "moonraker" (default) or "bambu" — cloud sets printer_type
+			Host:   m.Host, // set for Bambu; empty for Moonraker (cloud uses device IP)
 			UIPort: m.UIPort,
 		})
 	}

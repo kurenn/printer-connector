@@ -54,9 +54,9 @@ Printer Connector solves this by:
 - ✅ **Running locally** on your printer's Raspberry Pi
 - ✅ **Creating outbound connections** (no open ports needed)
 - ✅ **Using secure authentication** (pairing tokens and secrets)
-- ✅ **Working with Klipper** (via Moonraker API)
+- ✅ **Working with Klipper** (Moonraker API) and **Bambu Lab** (MQTT + FTPS, LAN mode)
 - ✅ **Being lightweight** (minimal resource usage, written in Go)
-- ✅ **Zero external dependencies** (stdlib only)
+- ✅ **Lean dependencies** (stdlib for Klipper; a small MQTT + FTPS client for Bambu)
 
 ---
 
@@ -97,18 +97,23 @@ Printer Connector solves this by:
 
 ## 🖨️ Supported Printers
 
-Printer Connector works with any 3D printer running **Klipper** firmware with **Moonraker** API access:
+Printer Connector speaks each printer family's native protocol through a pluggable driver:
 
-### ✅ Tested & Supported:
+### ✅ Klipper / Moonraker (HTTP)
 - Voron 2.4, Trident, 0.1, Switchwire
 - Creality K1 / K1 Max
 - Prusa MK3/MK4 (with Klipper)
 - Ender 3 / Ender 5 (with Klipper upgrade)
 - Any custom Klipper build
 
+### ✅ Bambu Lab (MQTT + FTPS, LAN mode)
+- X1 / X1C, P1P / P1S, A1 / A1 mini, and compatible models
+- Requires **LAN Mode / Developer Mode** enabled on the printer
+- See [docs/BAMBU_INTEGRATION.md](docs/BAMBU_INTEGRATION.md) for setup and protocol details
+
 ### 📋 Requirements:
-- Klipper firmware installed
-- Moonraker API accessible (usually port 7125)
+- Klipper: Moonraker API accessible (usually port 7125)
+- Bambu: printer's **access code** + **serial number**, LAN Mode enabled (MQTT :8883, FTPS :990)
 - Raspberry Pi or similar Linux device (arm64 or amd64)
 - Network connectivity
 
