@@ -131,18 +131,48 @@ final class FleetModel: ObservableObject {
     // view to show. These also document the legal transitions.
 
     func beginScan() {
-        scanProbed = 214
-        scanTotal = 254
-        discovered = [
-            DiscoveredPrinter(id: "d1", name: "voron-13.local", kind: .klipper,
-                              detail: "Klipper · Moonraker · 10.0.1.54", status: .discovered, host: "10.0.1.54"),
-            DiscoveredPrinter(id: "d2", name: "P1S · Shop", kind: .bambu,
-                              detail: "Bambu LAN · X1 series · 10.0.1.62", status: .discovered, host: "10.0.1.62"),
-            DiscoveredPrinter(id: "d3", name: "10.0.1.118", kind: .printer,
-                              detail: "Probing… port 80, 5000, 7125", status: .checking, host: "10.0.1.118"),
-        ]
         state = .scanning
+        discovered = []
+        scanProbed = 0
+        scanTotal = 254
+        DiscoveryService.scan { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let payload):
+                self.scanTotal = max(payload.hosts_total, 1)
+                self.scanProbed = payload.hosts_probed
+                self.discovered = payload.printers.map { hit in
+                    DiscoveredPrinter(id: "\(hit.host):\(hit.port)",
+                                      name: hit.name,
+                                      kind: Self.kind(from: hit.kind),
+                                      detail: hit.detail,
+                                      status: .discovered,
+                                      host: hit.host)
+                }
+            case .failure:
+                // No bundled helper (e.g. `swift run`) — keep the demo flowing.
+                self.scanProbed = self.scanTotal
+                self.discovered = Self.sampleDiscovered
+            }
+        }
     }
+
+    private static func kind(from raw: String) -> PrinterKind {
+        switch raw {
+        case "bambu":   return .bambu
+        case "klipper": return .klipper
+        default:        return .printer
+        }
+    }
+
+    static let sampleDiscovered: [DiscoveredPrinter] = [
+        DiscoveredPrinter(id: "d1", name: "voron-13.local", kind: .klipper,
+                          detail: "Klipper · Moonraker · 10.0.1.54", status: .discovered, host: "10.0.1.54"),
+        DiscoveredPrinter(id: "d2", name: "P1S · Shop", kind: .bambu,
+                          detail: "Bambu LAN · X1 series · 10.0.1.62", status: .discovered, host: "10.0.1.62"),
+        DiscoveredPrinter(id: "d3", name: "10.0.1.118", kind: .printer,
+                          detail: "Probing… port 80, 5000, 7125", status: .checking, host: "10.0.1.118"),
+    ]
 
     func beginPairing(_ target: DiscoveredPrinter) {
         pairingTarget = target

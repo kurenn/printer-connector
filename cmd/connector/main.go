@@ -2,20 +2,41 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"printer-connector/internal/agent"
 	"printer-connector/internal/config"
+	"printer-connector/internal/discovery"
 )
 
 var version = "0.1.0"
 
+// runDiscover performs a LAN sweep for Moonraker printers and prints the result
+// as JSON on stdout. Standalone (no --config); used by the macOS menubar app's
+// "Scan network" flow.
+func runDiscover() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	res := discovery.Scan(ctx)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(res)
+}
+
 func main() {
+	// Subcommands are intercepted before flag parsing / the --config check.
+	if len(os.Args) > 1 && os.Args[1] == "discover" {
+		runDiscover()
+		return
+	}
+
 	var (
 		cfgPath     string
 		logLevel    string

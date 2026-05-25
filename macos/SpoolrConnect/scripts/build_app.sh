@@ -48,6 +48,11 @@ PLIST
 
 echo "APPL????" > "$APP/Contents/PkgInfo"
 
+echo "▸ go build connector helper (powers real network discovery)"
+APP_ABS="$(pwd)/$APP"
+REPO_ROOT="$(cd ../.. && pwd)"
+( cd "$REPO_ROOT" && go build -o "$APP_ABS/Contents/Resources/printer-connector" ./cmd/connector )
+
 echo "▸ ad-hoc codesign"
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || echo "  (codesign skipped)"
 
