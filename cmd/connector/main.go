@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -22,16 +24,41 @@ import (
 
 var version = "0.1.0"
 
-// runDiscover performs a LAN sweep for Moonraker printers and prints the result
-// as JSON on stdout. Standalone (no --config); used by the macOS menubar app's
-// "Scan network" flow.
+// bambuFlag collects repeated --bambu specs ("host,serial,accesscode,name").
+type bambuFlag []string
+
+func (b *bambuFlag) String() string { return strings.Join(*b, " ") }
+func (b *bambuFlag) Set(v string) error {
+	*b = append(*b, v)
+	return nil
+}
+
+// runDiscover sweeps the LAN for Moonraker printers AND listens for Bambu SSDP
+// beacons, printing both as JSON. Standalone (no --config); powers the menubar
+// app's "Scan network" flow.
 func runDiscover() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	res := discovery.Scan(ctx)
+
+	var (
+		moon  discovery.Result
+		bambu []discovery.BambuPrinter
+		wg    sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() { defer wg.Done(); moon = discovery.Scan(ctx) }()
+	go func() { defer wg.Done(); bambu = discovery.ScanBambu(ctx, 4*time.Second) }()
+	wg.Wait()
+
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(res)
+	_ = enc.Encode(map[string]any{
+		"hosts_total":  moon.HostsTotal,
+		"hosts_probed": moon.HostsProbed,
+		"subnets":      moon.Subnets,
+		"printers":     moon.Printers,
+		"bambu":        bambu, // need a user-entered access code before pairing
+	})
 }
 
 // runRegister discovers every Moonraker printer on the LAN and registers them
@@ -42,10 +69,12 @@ func runDiscover() {
 func runRegister() {
 	fs := flag.NewFlagSet("register", flag.ExitOnError)
 	var token, cloudURL, site, cfgPath string
+	var bambu bambuFlag
 	fs.StringVar(&token, "token", "", "Pairing token (required)")
 	fs.StringVar(&cloudURL, "cloud", "", "Cloud URL override")
 	fs.StringVar(&site, "site", "", "Site name")
 	fs.StringVar(&cfgPath, "config", defaultConfigPath(), "Config path")
+	fs.Var(&bambu, "bambu", "Bambu printer 'host,serial,accesscode,name' (repeatable)")
 	_ = fs.Parse(os.Args[2:])
 
 	emitErr := func(msg string) {
@@ -77,12 +106,41 @@ func runRegister() {
 	defer cancel()
 
 	found := discovery.Scan(ctx)
-	if len(found.Printers) == 0 {
-		emitErr("no Moonraker printers found on the network")
+
+	cfgPrinters := make([]config.Printer, 0, len(found.Printers)+len(bambu))
+	regPrinters := make([]cloud.PrinterInfo, 0, len(found.Printers)+len(bambu))
+
+	// Bambu printers come from the UI as "host,serial,accesscode,name" (the
+	// access code can't be discovered — the user reads it off the printer).
+	// Credentials stay in connector.json; only name/type/host go to the cloud.
+	for _, spec := range bambu {
+		parts := strings.SplitN(spec, ",", 4)
+		if len(parts) < 3 || parts[0] == "" {
+			continue
+		}
+		host, serial, code := parts[0], parts[1], parts[2]
+		name := host
+		if len(parts) == 4 && parts[3] != "" {
+			name = parts[3]
+		}
+		cfgPrinters = append(cfgPrinters, config.Printer{
+			Type:       config.TypeBambu,
+			Name:       name,
+			Host:       host,
+			Serial:     serial,
+			AccessCode: code,
+		})
+		regPrinters = append(regPrinters, cloud.PrinterInfo{
+			Name: name,
+			Type: config.TypeBambu,
+			Host: host,
+		})
 	}
 
-	cfgPrinters := make([]config.Printer, 0, len(found.Printers))
-	regPrinters := make([]cloud.PrinterInfo, 0, len(found.Printers))
+	if len(found.Printers) == 0 && len(regPrinters) == 0 {
+		emitErr("no printers found on the network")
+	}
+
 	for _, p := range found.Printers {
 		cfgPrinters = append(cfgPrinters, config.Printer{
 			Type:    config.TypeMoonraker,

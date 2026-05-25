@@ -13,10 +13,18 @@ enum DiscoveryService {
         let detail: String
     }
 
+    struct BambuHit: Decodable {
+        let host: String
+        let serial: String
+        let model: String
+        let name: String
+    }
+
     struct Payload: Decodable {
         let hosts_total: Int
         let hosts_probed: Int
         let printers: [Hit]
+        let bambu: [BambuHit]?
     }
 
     enum DiscoveryError: Error { case helperNotFound }
