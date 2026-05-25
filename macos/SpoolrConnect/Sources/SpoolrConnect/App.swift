@@ -55,7 +55,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(sender)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            // Activate the app + make the popover window key so SwiftUI controls
+            // receive the FIRST click. Without this, an .accessory app's popover
+            // window isn't key, so the first click just activates it and is
+            // swallowed (buttons appear to "do nothing" until a second click).
+            NSApp.activate(ignoringOtherApps: true)
+            popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
         }
     }
 
