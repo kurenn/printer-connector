@@ -19,7 +19,19 @@ enum SpoolrConnectMain {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
-    private let model = FleetModel()
+
+    // Boot into the first-run Empty state so the full first-connection flow
+    // (Empty → Scanning → Pairing → Just paired → Attention) can be walked from
+    // the start — every relaunch is a clean reset. Pass `--fleet` to instead
+    // load the sample fleet and land on the Attention Mode home.
+    private let model: FleetModel = {
+        if CommandLine.arguments.contains("--fleet") {
+            return FleetModel(loadSample: true)
+        }
+        let m = FleetModel(loadSample: false)
+        m.state = .empty
+        return m
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         popover.behavior = .transient
