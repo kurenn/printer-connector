@@ -148,10 +148,14 @@ func (a *Agent) pair(ctx context.Context) error {
 	printers := make([]cloud.PrinterInfo, 0, len(a.cfg.Printers))
 	for _, m := range a.cfg.Printers {
 		host, mport := hostPortFromBaseURL(m.BaseURL)
+		if m.Host != "" {
+			host = m.Host // Bambu printers carry their own host directly
+		}
 		printers = append(printers, cloud.PrinterInfo{
 			Name:          m.Name,
+			Type:          m.Type, // "moonraker" (default) or "bambu" → cloud sets printer_type
 			Host:          host,
-			MoonrakerPort: mport,
+			MoonrakerPort: mport, // 0 for Bambu (no Moonraker port)
 			UIPort:        m.UIPort,
 		})
 	}

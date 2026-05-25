@@ -1,0 +1,24 @@
+{
+  "cloud_url": "https://www.spoolr.io",
+  "pairing_token": "PASTE_PAIRING_TOKEN_FROM_THE_WEB_APP",
+  "site_name": "Home Lab",
+  "poll_commands_seconds": 3,
+  "push_snapshots_seconds": 30,
+  "heartbeat_seconds": 10,
+  "state_dir": "./state",
+  "printers": [
+    {
+      "name": "Bambu X1C",
+      "type": "bambu",
+      "host": "192.168.68.80",
+      "serial": "01P00A000000000",
+      "access_code": "12345678"
+    },
+    {
+      "name": "Voron 2.4",
+      "type": "moonraker",
+      "base_url": "http://192.168.68.70:7125",
+      "ui_port": 4408
+    }
+  ]
+}
