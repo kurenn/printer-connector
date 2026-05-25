@@ -45,6 +45,16 @@ jobs:
           GOOS=linux GOARCH=mipsle GOMIPS=hardfloat \
             go build -trimpath -ldflags "$ldflags" -o dist/printer-connector-mips ./cmd/connector
 
+          # Desktop targets — the SpoolrConnect app (and its "Check for updates"
+          # button) runs on macOS; also ship Windows. CGO disabled, so these
+          # cross-compile cleanly on the Linux runner.
+          GOOS=darwin GOARCH=arm64 \
+            go build -trimpath -ldflags "$ldflags" -o dist/printer-connector-darwin-arm64 ./cmd/connector
+          GOOS=darwin GOARCH=amd64 \
+            go build -trimpath -ldflags "$ldflags" -o dist/printer-connector-darwin-amd64 ./cmd/connector
+          GOOS=windows GOARCH=amd64 \
+            go build -trimpath -ldflags "$ldflags" -o dist/printer-connector-windows-amd64.exe ./cmd/connector
+
       - name: Generate checksums
         run: cd dist && sha256sum * > SHA256SUMS
 
@@ -55,4 +65,7 @@ jobs:
             dist/printer-connector-arm64
             dist/printer-connector-amd64
             dist/printer-connector-mips
+            dist/printer-connector-darwin-arm64
+            dist/printer-connector-darwin-amd64
+            dist/printer-connector-windows-amd64.exe
             dist/SHA256SUMS
