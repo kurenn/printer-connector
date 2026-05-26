@@ -10,14 +10,14 @@
     {
       "name": "Bambu X1C",
       "type": "bambu",
-      "host": "192.168.68.80",
+      "host": "192.168.1.80",
       "serial": "01P00A000000000",
       "access_code": "12345678"
     },
     {
       "name": "Voron 2.4",
       "type": "moonraker",
-      "base_url": "http://192.168.68.70:7125",
+      "base_url": "http://192.168.1.70:7125",
       "ui_port": 4408
     }
   ]

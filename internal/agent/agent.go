@@ -184,7 +184,7 @@ func (a *Agent) watchdogLoop(ctx context.Context) error {
 }
 
 // hostPortFromBaseURL extracts host + port from a Moonraker base URL such as
-// "http://192.168.68.70:7125". Port defaults to 7125 when absent.
+// "http://192.168.1.70:7125". Port defaults to 7125 when absent.
 func hostPortFromBaseURL(baseURL string) (string, int) {
 	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" {

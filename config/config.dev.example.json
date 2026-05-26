@@ -1,16 +1,16 @@
 {
-  "connector_id": "46",
-  "connector_secret": "c_o68z3BWRtRZO-YRA8BQYCIRw1unhciMjksggYCMo4",
-  "site_name": "Home Lab",
+  "connector_id": "",
+  "connector_secret": "",
+  "site_name": "My Lab",
   "poll_commands_seconds": 3,
   "push_snapshots_seconds": 30,
   "heartbeat_seconds": 10,
   "state_dir": "./state",
   "moonraker": [
     {
-      "printer_id": 262,
+      "printer_id": 0,
       "name": "Voron",
-      "base_url": "http://192.168.68.70:7125",
+      "base_url": "http://192.168.1.70:7125",
       "ui_port": 4408
     }
   ]

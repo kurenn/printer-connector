@@ -745,6 +745,10 @@ go build -o printer-connector ./cmd/connector
 # Run tests
 go test ./...
 
+# Create your local dev config from the template (config.dev.json is gitignored —
+# never commit a real connector_secret), then register or fill it in:
+cp config/config.dev.example.json config/config.dev.json
+
 # Run with dev config
 ./printer-connector --config config/config.dev.json --log-level debug
 
@@ -759,7 +763,7 @@ The connector supports the following environment variables:
 
 - **`CLOUD_URL`**: Override the cloud API URL
   - Default: `https://www.spoolr.io` (production)
-  - Development: `export CLOUD_URL=http://localhost:3000` or `http://192.168.68.50:3000`
+  - Development: `export CLOUD_URL=http://localhost:3000` or `http://192.168.1.50:3000`
   - Takes precedence over config file `cloud_url` field
 
 Example for local Rails development:
@@ -771,7 +775,7 @@ export CLOUD_URL=http://localhost:3000
 For systemd services, add to the service file:
 ```ini
 [Service]
-Environment="CLOUD_URL=http://192.168.68.50:3000"
+Environment="CLOUD_URL=http://192.168.1.50:3000"
 ```
 
 ### Project Structure
@@ -798,7 +802,7 @@ printer-connector/
 │   └── util/               # Utilities
 │       └── backoff.go      # Exponential backoff
 ├── config/
-│   └── config.dev.json     # Development config template
+│   └── config.dev.example.json  # Dev config template (copy → config.dev.json)
 ├── install-klipper.sh      # Vanilla Klipper installer
 ├── install-k1.sh           # K1 Max installer
 ├── uninstall.sh            # Uninstaller
