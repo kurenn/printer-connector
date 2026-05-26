@@ -262,6 +262,14 @@ func (c *Client) UploadGcode(ctx context.Context, presignedURL, filePath string)
 	return nil
 }
 
+// MarkWebcamRequestFailed marks a webcam request as failed on the Rails side,
+// preventing the connector's webcam loop from retrying it forever.
+func (c *Client) MarkWebcamRequestFailed(ctx context.Context, requestID StringOrNumber, errMsg string) error {
+	path := fmt.Sprintf("/api/v1/webcam_requests/%s/fail", url.PathEscape(requestID.String()))
+	body := map[string]string{"error_message": errMsg}
+	return c.doJSON(ctx, http.MethodPost, path, c.authHeaders(), body, nil)
+}
+
 // GetWebcamRequests fetches pending webcam snapshot requests for this connector
 func (c *Client) GetWebcamRequests(ctx context.Context, limit int) ([]WebcamRequest, error) {
 	path := fmt.Sprintf("/api/v1/connectors/%s/webcam_requests?limit=%d", url.PathEscape(c.connectorID), limit)
