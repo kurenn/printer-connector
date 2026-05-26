@@ -25,9 +25,16 @@ type Client struct {
 	// printer-specific, so we discover them once via /printer/objects/list and
 	// cache them. Guarded by mu; resolved is only set true on a successful
 	// discovery so a transient failure is retried on the next query.
+	//
+	// Thermal extras (extruder1..N, temperature_sensor *, heater_generic *,
+	// temperature_fan *) follow the same pattern — they are discovered together
+	// with filament sensors in a single /printer/objects/list call and cached
+	// under thermalExtras / thermalsResolved.
 	mu              sync.Mutex
 	filamentSensors []string
 	sensorsResolved bool
+	thermalExtras   []string
+	thermalsResolved bool
 }
 
 func New(baseURL string, uiPort int) *Client {
@@ -85,6 +92,12 @@ func (c *Client) QueryObjects(ctx context.Context) (map[string]any, error) {
 	for _, name := range c.filamentSensorObjects(ctx) {
 		objects[name] = nil
 	}
+	// Include extra thermal objects (additional extruders, temperature_sensor *,
+	// heater_generic *, temperature_fan *) so Rails receives chamber/toolhead
+	// temperatures. Discovery is best-effort — failures just omit the extras.
+	for _, name := range c.thermalExtraObjects(ctx) {
+		objects[name] = nil
+	}
 
 	req := map[string]any{"objects": objects}
 
@@ -105,21 +118,71 @@ func (c *Client) filamentSensorObjects(ctx context.Context) []string {
 	if c.sensorsResolved {
 		return c.filamentSensors
 	}
+	c.discoverObjectsLocked(ctx)
+	return c.filamentSensors
+}
 
+// thermalExtraObjects returns the printer's additional thermal object names:
+// extra extruders (extruder1..N), temperature_sensor *, heater_generic *, and
+// temperature_fan *. These are discovered and cached on first use using the same
+// /printer/objects/list call as filament sensors. On discovery failure it
+// returns nil and leaves the cache unresolved so the next query retries.
+func (c *Client) thermalExtraObjects(ctx context.Context) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.thermalsResolved {
+		return c.thermalExtras
+	}
+	c.discoverObjectsLocked(ctx)
+	return c.thermalExtras
+}
+
+// discoverObjectsLocked calls /printer/objects/list and populates both the
+// filament-sensor cache and the thermal-extras cache in a single HTTP round
+// trip. It must be called with c.mu held. On failure the caches are left
+// unresolved so the next caller retries.
+func (c *Client) discoverObjectsLocked(ctx context.Context) {
 	names, err := c.listObjects(ctx)
 	if err != nil {
-		return nil
+		return
 	}
 
 	var sensors []string
+	var extras []string
 	for _, n := range names {
 		if strings.HasPrefix(n, "filament_switch_sensor ") || strings.HasPrefix(n, "filament_motion_sensor ") {
 			sensors = append(sensors, n)
+		} else if isThermalExtra(n) {
+			extras = append(extras, n)
 		}
 	}
 	c.filamentSensors = sensors
 	c.sensorsResolved = true
-	return sensors
+	c.thermalExtras = extras
+	c.thermalsResolved = true
+}
+
+// isThermalExtra reports whether a Moonraker object name represents a thermal
+// object that should be included in snapshots beyond the always-queried
+// "extruder" and "heater_bed". Matches:
+//   - extruder1, extruder2, … (multi-extruder setups)
+//   - temperature_sensor <name>  (e.g. "temperature_sensor chamber")
+//   - heater_generic <name>      (e.g. "heater_generic chamber_heater")
+//   - temperature_fan <name>     (e.g. "temperature_fan mcu_fan")
+func isThermalExtra(name string) bool {
+	if len(name) > len("extruder") && strings.HasPrefix(name, "extruder") {
+		rest := name[len("extruder"):]
+		for _, ch := range rest {
+			if ch < '0' || ch > '9' {
+				goto notExtruder
+			}
+		}
+		return true
+	notExtruder:
+	}
+	return strings.HasPrefix(name, "temperature_sensor ") ||
+		strings.HasPrefix(name, "heater_generic ") ||
+		strings.HasPrefix(name, "temperature_fan ")
 }
 
 // listObjects fetches the list of available Klipper object names from Moonraker.
