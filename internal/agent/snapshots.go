@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"printer-connector/internal/cloud"
+	"printer-connector/internal/driver"
 )
 
 func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
@@ -13,6 +14,10 @@ func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 
 	attempted := 0
 	var snaps []cloud.Snapshot
+	// statusEntries accumulates one entry per configured printer (including
+	// unreachable ones) for the local status.json written at the end of the cycle.
+	statusEntries := make([]printerStatus, 0, len(a.cfg.Printers))
+
 	for _, p := range a.cfg.Printers {
 		mc := a.drivers[p.PrinterID]
 		if mc == nil {
@@ -23,14 +28,29 @@ func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 		payload, err := mc.QueryObjects(ctx)
 		if err != nil {
 			a.log.Warn("printer query failed", "printer_id", p.PrinterID, "error", err)
+			// Record as unreachable/offline so the local status file still lists it.
+			statusEntries = append(statusEntries, buildPrinterStatus(p, driver.Telemetry{}, false))
 			continue
 		}
 
+		normalized := a.withNormalized(p.PrinterID, payload)
 		snaps = append(snaps, cloud.Snapshot{
 			PrinterID:  p.PrinterID,
 			CapturedAt: now.Format(time.RFC3339),
-			Payload:    a.withNormalized(p.PrinterID, payload),
+			Payload:    normalized,
 		})
+
+		// Extract the canonical telemetry that withNormalized already computed.
+		tel, _ := normalized["normalized"].(driver.Telemetry)
+		statusEntries = append(statusEntries, buildPrinterStatus(p, tel, true))
+	}
+
+	// Write the local status file regardless of whether the cloud push succeeds —
+	// the menu-bar app's local view must not depend on network connectivity.
+	if a.cfgPath != "" && len(statusEntries) > 0 {
+		if err := writeStatusFile(a.cfgPath, a.cfg, statusEntries); err != nil {
+			a.log.Warn("status.json write failed", "error", err)
+		}
 	}
 
 	if len(snaps) == 0 {
