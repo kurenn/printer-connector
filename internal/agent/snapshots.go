@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"printer-connector/internal/cloud"
@@ -10,16 +11,18 @@ import (
 func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 	now := time.Now().UTC()
 
+	attempted := 0
 	var snaps []cloud.Snapshot
 	for _, p := range a.cfg.Printers {
 		mc := a.drivers[p.PrinterID]
 		if mc == nil {
 			continue
 		}
+		attempted++
 
 		payload, err := mc.QueryObjects(ctx)
 		if err != nil {
-			a.log.Warn("moonraker query failed", "printer_id", p.PrinterID, "error", err)
+			a.log.Warn("printer query failed", "printer_id", p.PrinterID, "error", err)
 			continue
 		}
 
@@ -31,13 +34,23 @@ func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 	}
 
 	if len(snaps) == 0 {
-		return nil
+		// No printers configured this cycle: genuinely nothing to do.
+		if attempted == 0 {
+			return nil
+		}
+		// We tried every printer and got nothing back. This is the silent-stall
+		// case: returning nil here would let the loop report success while
+		// pushing no telemetry, leaving the dashboard to mark the printers
+		// offline with no explanation. Surface it as an error so the loop logs +
+		// backs off and the stall clock is not advanced.
+		return fmt.Errorf("no telemetry collected from %d reachable printer(s)", attempted)
 	}
 
 	resp, err := a.cloud.PushSnapshots(ctx, cloud.SnapshotsBatchRequest{Snapshots: snaps})
 	if err != nil {
 		return err
 	}
+	a.lastSnapshotPushUnix.Store(time.Now().UnixNano())
 	a.log.Info("snapshots pushed", "count", len(snaps), "inserted", resp.Inserted)
 	return nil
 }

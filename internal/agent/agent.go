@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"printer-connector/internal/bambu"
@@ -38,6 +39,15 @@ type Agent struct {
 	drivers map[int]driver.Driver
 
 	startedAt time.Time
+
+	// lastSnapshotPushUnix is the UnixNano of the last snapshot batch that was
+	// successfully pushed with at least one printer. The watchdog reads it to
+	// detect a telemetry stall; collectAndPushSnapshots writes it on success.
+	lastSnapshotPushUnix atomic.Int64
+
+	// restartDelay is the pause before superviseLoop restarts a faulted loop.
+	// Set from New(); a zero value (used in tests) restarts immediately.
+	restartDelay time.Duration
 }
 
 func New(opts Options) *Agent {
@@ -52,14 +62,15 @@ func New(opts Options) *Agent {
 	})
 
 	return &Agent{
-		cfgPath:   opts.ConfigPath,
-		cfg:       opts.Config,
-		log:       opts.Logger,
-		version:   opts.Version,
-		once:      opts.Once,
-		cloud:     cl,
-		drivers:   buildDrivers(opts.Config.Printers),
-		startedAt: time.Now(),
+		cfgPath:      opts.ConfigPath,
+		cfg:          opts.Config,
+		log:          opts.Logger,
+		version:      opts.Version,
+		once:         opts.Once,
+		cloud:        cl,
+		drivers:      buildDrivers(opts.Config.Printers),
+		startedAt:    time.Now(),
+		restartDelay: loopRestartDelay,
 	}
 }
 
@@ -101,11 +112,19 @@ func (a *Agent) Run(ctx context.Context) error {
 		return nil
 	}
 
-	errCh := make(chan error, 4)
-	go func() { errCh <- a.heartbeatLoop(ctx) }()
-	go func() { errCh <- a.commandsLoop(ctx) }()
-	go func() { errCh <- a.snapshotsLoop(ctx) }()
-	go func() { errCh <- a.webcamLoop(ctx) }()
+	// Seed the stall clock so the watchdog measures from startup: if no batch
+	// is pushed within the threshold after boot, that is itself a stall.
+	a.lastSnapshotPushUnix.Store(time.Now().UnixNano())
+
+	// Each loop is supervised: a panic or unexpected return is recovered, logged
+	// loudly, and the loop restarted, so one faulting loop can neither vanish
+	// silently nor crash the sibling loops (heartbeat, commands, webcam).
+	errCh := make(chan error, 5)
+	go func() { errCh <- a.superviseLoop(ctx, "heartbeat", a.heartbeatLoop) }()
+	go func() { errCh <- a.superviseLoop(ctx, "commands", a.commandsLoop) }()
+	go func() { errCh <- a.superviseLoop(ctx, "snapshots", a.snapshotsLoop) }()
+	go func() { errCh <- a.superviseLoop(ctx, "webcam", a.webcamLoop) }()
+	go func() { errCh <- a.superviseLoop(ctx, "watchdog", a.watchdogLoop) }()
 
 	select {
 	case <-ctx.Done():
@@ -115,6 +134,49 @@ func (a *Agent) Run(ctx context.Context) error {
 			return nil
 		}
 		return err
+	}
+}
+
+// watchdogLoop watches the snapshot stall clock and logs loudly when telemetry
+// goes quiet, so a connector that is heartbeating but pushing no snapshots —
+// the failure that makes printers read "offline" while the connector looks
+// online — is observable instead of silent. It never pushes telemetry itself.
+func (a *Agent) watchdogLoop(ctx context.Context) error {
+	interval := time.Duration(a.cfg.PushSnapshotsSeconds) * time.Second
+	if interval < 10*time.Second {
+		interval = 10 * time.Second
+	}
+	// Allow a few missed pushes before alarming, but never less than 90s — the
+	// same window after which the dashboard flips a printer to offline.
+	threshold := 3 * time.Duration(a.cfg.PushSnapshotsSeconds) * time.Second
+	if threshold < 90*time.Second {
+		threshold = 90 * time.Second
+	}
+
+	tick := time.NewTicker(interval)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+		}
+
+		// Nothing to stall on when no printers are configured.
+		if len(a.cfg.Printers) == 0 {
+			continue
+		}
+
+		last := time.Unix(0, a.lastSnapshotPushUnix.Load())
+		if snapshotStalled(last, time.Now(), threshold) {
+			a.log.Error("snapshot telemetry stalled — printers will read offline in the dashboard",
+				"stalled_for", time.Since(last).Round(time.Second).String(),
+				"last_push", last.UTC().Format(time.RFC3339),
+				"threshold", threshold.String(),
+				"hint", "connector is alive (heartbeating) but cannot reach any printer; check Moonraker/printer power and LAN",
+			)
+		}
 	}
 }
 
