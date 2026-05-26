@@ -28,15 +28,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: KeyablePanel!
     private var clickMonitor: Any?
 
-    // Boot into the first-run Empty state so the full flow can be walked from the
-    // start — every relaunch is a clean reset. Pass `--fleet` for the sample home.
+    // Reflect the persisted pairing on launch. If connector.json already has a
+    // connector_id we're paired — boot into the connected home (and AgentService
+    // reconnects below with the saved credentials), so a restart NEVER forces a
+    // re-pair with a fresh token. Only a truly unpaired install starts in Empty.
+    // `--fleet` still shows the sample home.
     private let model: FleetModel = {
         if CommandLine.arguments.contains("--fleet") {
             return FleetModel(loadSample: true)
         }
-        let m = FleetModel(loadSample: false)
-        m.state = .empty
-        return m
+        return FleetModel.bootstrap(configPath: AgentService.configPath())
     }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
