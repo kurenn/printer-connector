@@ -444,6 +444,14 @@ func (a *Agent) handleWebcamRequest(ctx context.Context, req cloud.WebcamRequest
 			"printer_id", req.PrinterID,
 			"error", err,
 		)
+		// Best-effort: mark the request failed so Rails stops returning it in the
+		// pending list and the webcam loop stops retrying it every 2 seconds.
+		if markErr := a.cloud.MarkWebcamRequestFailed(ctx, req.ID, err.Error()); markErr != nil {
+			a.log.Warn("failed to mark webcam request as failed",
+				"request_id", req.ID.String(),
+				"error", markErr,
+			)
+		}
 		return err
 	}
 
