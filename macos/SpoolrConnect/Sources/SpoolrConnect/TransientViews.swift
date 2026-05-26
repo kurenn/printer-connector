@@ -78,12 +78,18 @@ struct ScanningView: View {
 
             HStack(spacing: 10) {
                 ScanPulse()
-                (Text("Probing mDNS · ").foregroundColor(Theme.text2)
-                 + Text("\(model.scanProbed)").foregroundColor(Theme.text1)
-                 + Text(" / ").foregroundColor(Theme.text2)
-                 + Text("\(model.scanTotal)").foregroundColor(Theme.text1)
-                 + Text(" hosts").foregroundColor(Theme.text2))
-                    .font(Theme.mono(10.5)).tracking(0.4)
+                if model.scanInProgress {
+                    // Sweep is in flight (no streamed per-host progress) — cycle a
+                    // lively, on-theme loader instead of a frozen "0 / 254".
+                    ScanPhraseLoader(phrases: FleetModel.scanPhrases)
+                } else {
+                    (Text("Probing mDNS · ").foregroundColor(Theme.text2)
+                     + Text("\(model.scanProbed)").foregroundColor(Theme.text1)
+                     + Text(" / ").foregroundColor(Theme.text2)
+                     + Text("\(model.scanTotal)").foregroundColor(Theme.text1)
+                     + Text(" hosts").foregroundColor(Theme.text2))
+                        .font(Theme.mono(10.5)).tracking(0.4)
+                }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 12).padding(.vertical, 9)
@@ -124,6 +130,35 @@ private struct ScanPulse: View {
             guard !reduceMotion else { return }
             withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) { animate = true }
         }
+    }
+}
+
+// Cycles on-theme loader lines while a scan is in flight, crossfading between
+// them. Honest: it conveys "working", not fake progress. reduceMotion swaps the
+// text without animating.
+private struct ScanPhraseLoader: View {
+    let phrases: [String]
+    @State private var index = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let tick = Timer.publish(every: 1.9, on: .main, in: .common).autoconnect()
+
+    private var phrase: String { phrases.isEmpty ? "Scanning…" : phrases[index % phrases.count] }
+
+    var body: some View {
+        Text(phrase)
+            .font(Theme.mono(10.5)).tracking(0.4)
+            .foregroundColor(Theme.text2)
+            .id(reduceMotion ? 0 : index) // new identity → crossfade transition
+            .transition(.opacity)
+            .onAppear { index = Int.random(in: 0..<max(phrases.count, 1)) } // fresh each scan
+            .onReceive(tick) { _ in
+                guard !phrases.isEmpty else { return }
+                if reduceMotion {
+                    index += 1
+                } else {
+                    withAnimation(.easeInOut(duration: 0.4)) { index += 1 }
+                }
+            }
     }
 }
 

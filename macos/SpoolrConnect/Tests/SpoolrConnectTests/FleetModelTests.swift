@@ -26,6 +26,13 @@ final class FleetModelTests: XCTestCase {
         XCTAssertTrue(model.discovered.contains { $0.status == .discovered })
     }
 
+    func testScanPhrasesAreNonEmptyAndUnique() {
+        XCTAssertFalse(FleetModel.scanPhrases.isEmpty)
+        XCTAssertTrue(FleetModel.scanPhrases.allSatisfy { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        XCTAssertEqual(FleetModel.scanPhrases.count, Set(FleetModel.scanPhrases).count,
+                       "loader phrases should be unique")
+    }
+
     func testBeginPairingEntersPairingWithSteps() {
         let model = FleetModel()
         model.beginScan()
