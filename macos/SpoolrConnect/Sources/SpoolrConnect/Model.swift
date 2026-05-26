@@ -74,6 +74,16 @@ final class FleetModel: ObservableObject {
     @Published var workspace: String = "northshore"
     @Published var version: String = "0.18.2"
 
+    // Status-file polling (paired sessions only).
+    private var statusPollTimer: AnyCancellable?
+    /// The path of the status.json the agent writes (same directory as connector.json).
+    private var statusFilePath: String {
+        URL(fileURLWithPath: AgentService.configPath())
+            .deletingLastPathComponent()
+            .appendingPathComponent("status.json")
+            .path
+    }
+
     // Transient-state working data.
     @Published var discovered: [DiscoveredPrinter] = []
     @Published var scanProbed: Int = 0
@@ -169,6 +179,32 @@ final class FleetModel: ObservableObject {
             Printer(id: p.name, name: p.name, kind: Self.kind(from: p.kind), state: .idle)
         }
         state = .attention
+        startStatusPolling()
+    }
+
+    // MARK: Status-file polling
+
+    /// Start a ~3s repeating timer that reads status.json and updates printers.
+    /// Called from `applyPaired` (launch re-attach) and after a successful register.
+    /// A missing or malformed file is silently ignored — the config-derived
+    /// placeholder list from `applyPaired` stays visible.
+    func startStatusPolling() {
+        stopStatusPolling()
+        pollStatusFile() // read once now so live status shows immediately, not after the first 3s tick
+        statusPollTimer = Timer.publish(every: 3, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.pollStatusFile() }
+    }
+
+    func stopStatusPolling() {
+        statusPollTimer?.cancel()
+        statusPollTimer = nil
+    }
+
+    private func pollStatusFile() {
+        guard let file = StatusFile.load(path: statusFilePath),
+              let entries = file.printers, !entries.isEmpty else { return }
+        printers = entries.map { StatusFile.mapPrinter($0) }
     }
 
     var linkedCount: Int { printers.count }
@@ -180,6 +216,7 @@ final class FleetModel: ObservableObject {
     func showTokenEntry() {
         pairingTarget = nil // generic entry — not tied to a specific discovered printer
         linkError = nil
+        stopStatusPolling()
         state = .tokenEntry
     }
 
@@ -240,6 +277,7 @@ final class FleetModel: ObservableObject {
                 self.token = ""
                 self.bambuDiscovered = []
                 self.state = .justPaired
+                self.startStatusPolling()
                 // (Re)start the agent so the printers push telemetry → the web
                 // UI shows them online. Restart picks up the rewritten config.
                 AgentService.restart()
@@ -251,6 +289,7 @@ final class FleetModel: ObservableObject {
     }
 
     func beginScan() {
+        stopStatusPolling()
         state = .scanning
         discovered = []
         scanProbed = 0
@@ -331,6 +370,7 @@ final class FleetModel: ObservableObject {
     func beginPairing(_ target: DiscoveredPrinter) {
         pairingTarget = target
         linkError = nil
+        stopStatusPolling()
         state = .tokenEntry
     }
 
