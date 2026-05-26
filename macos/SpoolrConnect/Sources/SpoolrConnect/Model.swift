@@ -88,6 +88,10 @@ final class FleetModel: ObservableObject {
     @Published var discovered: [DiscoveredPrinter] = []
     @Published var scanProbed: Int = 0
     @Published var scanTotal: Int = 254
+    // True while a LAN discovery sweep is in flight. The Go `discover` helper is a
+    // single blocking call (no streamed per-host progress), so the scanning view
+    // shows a cycling, on-theme loader while this is true instead of a frozen 0/254.
+    @Published var scanInProgress = false
     @Published var pairingTarget: DiscoveredPrinter?
     @Published var pairSteps: [PairStep] = []
     @Published var justPairedPrinter: Printer?
@@ -232,8 +236,10 @@ final class FleetModel: ObservableObject {
         discovered = []
         scanProbed = 0
         scanTotal = 254
+        scanInProgress = true
         DiscoveryService.scan { [weak self] result in
             guard let self else { return }
+            self.scanInProgress = false
             switch result {
             case .success(let payload):
                 self.scanTotal = max(payload.hosts_total, 1)
@@ -253,6 +259,24 @@ final class FleetModel: ObservableObject {
             }
         }
     }
+
+    // On-theme loader lines shown while a network scan is in flight. Blends
+    // printer-firmware vocabulary with the LAN-discovery context so the wait
+    // feels alive (and a little fun) rather than frozen.
+    static let scanPhrases = [
+        "Homing the axes…",
+        "Heating the hotend…",
+        "Listening for printers on the wire…",
+        "Knocking on port 7125…",
+        "Leveling the bed…",
+        "Sniffing out Klipper boxes…",
+        "Purging the nozzle…",
+        "Following the filament…",
+        "Tramming the gantry…",
+        "Warming up the chamber…",
+        "Pinging every spool on the subnet…",
+        "Reticulating layers…",
+    ]
 
     private static func kind(from raw: String) -> PrinterKind {
         switch raw {
