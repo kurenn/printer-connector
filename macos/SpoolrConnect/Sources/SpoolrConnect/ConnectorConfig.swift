@@ -11,6 +11,9 @@ struct ConnectorConfig {
     let connectorId: String
     let workspace: String?
     let printers: [(name: String, kind: String)]
+    /// LAN hosts (IPs) of the already-registered printers, parsed from each
+    /// printer's `base_url`. Used to hide already-linked printers from a rescan.
+    let registeredHosts: Set<String>
 
     /// Returns the parsed config only when it represents a real pairing (a
     /// non-empty connector_id). Missing file / unparseable / unpaired → nil.
@@ -25,11 +28,17 @@ struct ConnectorConfig {
         guard let id = connectorId, !id.isEmpty else { return nil } // not paired yet
 
         let workspace = (root["site_name"] as? String)?.nonEmpty
+        var hosts = Set<String>()
         let printers = (root["printers"] as? [[String: Any]] ?? []).compactMap { p -> (name: String, kind: String)? in
+            // Collect the host regardless of whether the printer is named, so a
+            // freshly-registered (unnamed) printer is still deduped from a rescan.
+            if let base = p["base_url"] as? String, let host = URL(string: base)?.host?.nonEmpty {
+                hosts.insert(host)
+            }
             guard let name = (p["name"] as? String)?.nonEmpty else { return nil }
             return (name: name, kind: (p["type"] as? String) ?? "")
         }
-        return ConnectorConfig(connectorId: id, workspace: workspace, printers: printers)
+        return ConnectorConfig(connectorId: id, workspace: workspace, printers: printers, registeredHosts: hosts)
     }
 }
 

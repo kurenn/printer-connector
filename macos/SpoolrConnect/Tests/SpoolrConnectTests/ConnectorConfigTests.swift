@@ -52,6 +52,20 @@ final class ConnectorConfigTests: XCTestCase {
         XCTAssertEqual(ConnectorConfig.load(path: path)?.printers.map(\.name), ["X1C"])
     }
 
+    func testLoadCollectsRegisteredHostsFromBaseURL() {
+        // The host is collected even for an unnamed printer, so a freshly-paired
+        // (not-yet-named) printer is still deduped from a rescan.
+        let path = writeTemp("""
+        {"connector_id":"2","printers":[
+          {"printer_id":1,"name":"K1","type":"klipper","base_url":"http://192.168.68.70:7125","ui_port":80},
+          {"printer_id":2,"name":"viktor","base_url":"http://192.168.68.81:7125"},
+          {"printer_id":3,"base_url":"http://192.168.68.87:7125"}
+        ]}
+        """)
+        XCTAssertEqual(ConnectorConfig.load(path: path)?.registeredHosts,
+                       ["192.168.68.70", "192.168.68.81", "192.168.68.87"])
+    }
+
     // MARK: - applyPaired reflects the config into the connected home
 
     func testApplyPairedEntersAttentionWithLinkedPrinters() {
