@@ -206,6 +206,62 @@ func (c *Client) UploadBackup(ctx context.Context, presignedURL, filePath string
 	return nil
 }
 
+// UploadGcode PUTs a fetched G-code file to a presigned cloud URL (the URL
+// carries its own signed token, so no auth headers are needed). Mirrors
+// UploadBackup but uses a client without the short total timeout — a G-code
+// file can be tens of MB and exceed the 5s used for small API calls. The upload
+// is bounded by the request context instead.
+func (c *Client) UploadGcode(ctx context.Context, presignedURL, filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open gcode file: %w", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat gcode file: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, presignedURL, file)
+	if err != nil {
+		return fmt.Errorf("failed to create upload request: %w", err)
+	}
+	req.Header.Set("Content-Type", "text/x-gcode")
+	req.ContentLength = fileInfo.Size()
+
+	client := &http.Client{
+		// No total Timeout: a large G-code upload is bounded by ctx, not 5s.
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   3 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			IdleConnTimeout:       30 * time.Second,
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("gcode upload request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respBody))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return fmt.Errorf("gcode upload failed with status %d: %s", resp.StatusCode, msg)
+	}
+
+	c.logger.Info("gcode uploaded successfully",
+		"size_bytes", fileInfo.Size(),
+		"status", resp.StatusCode,
+	)
+	return nil
+}
+
 // GetWebcamRequests fetches pending webcam snapshot requests for this connector
 func (c *Client) GetWebcamRequests(ctx context.Context, limit int) ([]WebcamRequest, error) {
 	path := fmt.Sprintf("/api/v1/connectors/%s/webcam_requests?limit=%d", url.PathEscape(c.connectorID), limit)

@@ -12,6 +12,7 @@ import (
 	"printer-connector/internal/backup"
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/driver"
+	"printer-connector/internal/gcode"
 	"printer-connector/internal/moonraker"
 	"printer-connector/internal/util"
 )
@@ -83,6 +84,8 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 			execErr = a.executeImportHistory(ctx, mc, cmd, result)
 		case "create_backup":
 			execErr = a.executeCreateBackup(ctx, cmd, result)
+		case "fetch_gcode":
+			execErr = a.executeFetchGcode(ctx, cmd, result)
 		default:
 			execErr = fmt.Errorf("unsupported action: %s", cmd.Action)
 		}
@@ -308,6 +311,61 @@ func (a *Agent) executeCreateBackup(ctx context.Context, cmd cloud.Command, resu
 	result["sha256"] = backupResult.SHA256
 	result["uploaded_at"] = time.Now().UTC().Format(time.RFC3339)
 
+	return nil
+}
+
+// fetchGcodeTimeout bounds the whole fetch+upload of a single G-code file.
+// Generous because the files can be tens of MB over a slow LAN, but finite so
+// a stuck transfer can't pin a command in "running" forever.
+const fetchGcodeTimeout = 5 * time.Minute
+
+// executeFetchGcode pulls the currently-printing G-code from Moonraker and
+// uploads it to the cloud's presigned URL so the web UI can render a live 3D
+// toolpath. Mirrors executeCreateBackup: stream to a temp file (never buffer
+// the whole file in memory) then PUT it back.
+func (a *Agent) executeFetchGcode(ctx context.Context, cmd cloud.Command, result map[string]any) error {
+	filename, _ := cmd.Params["filename"].(string)
+	if filename == "" {
+		return fmt.Errorf("missing params.filename for fetch_gcode")
+	}
+	uploadURL, _ := cmd.Params["upload_url"].(string)
+	if uploadURL == "" {
+		return fmt.Errorf("missing params.upload_url for fetch_gcode")
+	}
+
+	// G-code lives under Moonraker's "gcodes" file root, so this only works for
+	// Moonraker printers (Bambu et al. don't expose that API yet).
+	mc, ok := a.drivers[cmd.PrinterID].(*moonraker.Client)
+	if !ok {
+		return fmt.Errorf("gcode fetch is only supported for Moonraker printers (printer_id %d)", cmd.PrinterID)
+	}
+
+	fetchCtx, cancel := context.WithTimeout(ctx, fetchGcodeTimeout)
+	defer cancel()
+
+	a.log.Info("fetching active gcode over moonraker", "printer_id", cmd.PrinterID, "filename", filename)
+
+	fetched, err := gcode.FetchToTemp(fetchCtx, mc, filename)
+	if err != nil {
+		return fmt.Errorf("failed to fetch gcode: %w", err)
+	}
+	defer func() {
+		if rmErr := os.Remove(fetched.Path); rmErr != nil && !os.IsNotExist(rmErr) {
+			a.log.Warn("failed to cleanup fetched gcode", "path", fetched.Path, "error", rmErr)
+		}
+	}()
+
+	a.log.Info("gcode fetched", "printer_id", cmd.PrinterID, "size_bytes", fetched.SizeBytes)
+
+	if err := a.cloud.UploadGcode(fetchCtx, uploadURL, fetched.Path); err != nil {
+		return fmt.Errorf("failed to upload gcode: %w", err)
+	}
+
+	result["filename"] = filename
+	result["size_bytes"] = fetched.SizeBytes
+	result["uploaded_at"] = time.Now().UTC().Format(time.RFC3339)
+
+	a.log.Info("gcode uploaded successfully", "printer_id", cmd.PrinterID, "filename", filename)
 	return nil
 }
 
