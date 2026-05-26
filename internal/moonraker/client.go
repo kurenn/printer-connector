@@ -30,10 +30,10 @@ type Client struct {
 	// temperature_fan *) follow the same pattern — they are discovered together
 	// with filament sensors in a single /printer/objects/list call and cached
 	// under thermalExtras / thermalsResolved.
-	mu              sync.Mutex
-	filamentSensors []string
-	sensorsResolved bool
-	thermalExtras   []string
+	mu               sync.Mutex
+	filamentSensors  []string
+	sensorsResolved  bool
+	thermalExtras    []string
 	thermalsResolved bool
 }
 

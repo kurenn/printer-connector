@@ -85,7 +85,7 @@ func runDiscover() {
 // all under one pairing token (token → adds all printers → web UI updates),
 // persisting credentials to connector.json. Prints the result as JSON.
 //
-//   connector register --token <T> [--cloud <URL>] [--site <S>] [--config <P>]
+//	connector register --token <T> [--cloud <URL>] [--site <S>] [--config <P>]
 func runRegister() {
 	fs := flag.NewFlagSet("register", flag.ExitOnError)
 	var token, cloudURL, site, cfgPath string

@@ -144,8 +144,8 @@ func TestIsThermalExtra(t *testing.T) {
 		{"extruder1", true},
 		{"extruder2", true},
 		{"extruder10", true},
-		{"extruder", false},      // primary extruder — always queried, not an "extra"
-		{"extruderX", false},     // non-numeric suffix
+		{"extruder", false},  // primary extruder — always queried, not an "extra"
+		{"extruderX", false}, // non-numeric suffix
 		{"temperature_sensor chamber", true},
 		{"temperature_sensor bed_outer", true},
 		{"heater_generic chamber_heater", true},
