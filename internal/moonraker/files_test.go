@@ -67,3 +67,36 @@ func TestDownloadFileNotFound(t *testing.T) {
 		t.Error("expected an error for a 404 download")
 	}
 }
+
+func TestDownloadFileStream(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/server/files/gcodes/benchy.gcode" {
+			_, _ = w.Write([]byte("G28\nG1 X1 Y1 E1\n"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 0)
+	var buf bytes.Buffer
+	if err := c.DownloadFileStream(context.Background(), "gcodes", "benchy.gcode", &buf); err != nil {
+		t.Fatalf("DownloadFileStream: %v", err)
+	}
+	if buf.String() != "G28\nG1 X1 Y1 E1\n" {
+		t.Errorf("streamed %q, want gcode body", buf.String())
+	}
+}
+
+func TestDownloadFileStreamNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, 0)
+	var buf bytes.Buffer
+	if err := c.DownloadFileStream(context.Background(), "gcodes", "missing.gcode", &buf); err == nil {
+		t.Error("expected an error for a 404 stream download")
+	}
+}
