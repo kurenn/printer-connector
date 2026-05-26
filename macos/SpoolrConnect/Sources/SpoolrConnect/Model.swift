@@ -153,6 +153,33 @@ final class FleetModel: ObservableObject {
         state = .attention
     }
 
+    /// The launch model: a paired connector.json boots the connected home and
+    /// stays paired; an unpaired (or absent) one starts the first-run flow.
+    /// (`--fleet` sample home is handled by the App entry point.)
+    static func bootstrap(configPath: String) -> FleetModel {
+        let m = FleetModel(loadSample: false)
+        if let config = ConnectorConfig.load(path: configPath) {
+            m.applyPaired(config)
+        } else {
+            m.state = .empty
+        }
+        return m
+    }
+
+    /// Reflect an EXISTING pairing (from connector.json) on launch so a restart
+    /// stays paired: show the connected home with the linked printers by name,
+    /// not the first-run pairing flow. The agent reconnects with the saved
+    /// credentials separately (AgentService). Live per-printer status is the
+    /// deferred agent-seam work; until then they read as idle (a calm
+    /// placeholder) — the web dashboard has the real live state.
+    func applyPaired(_ config: ConnectorConfig) {
+        if let ws = config.workspace { workspace = ws }
+        printers = config.printers.map { p in
+            Printer(id: p.name, name: p.name, kind: Self.kind(from: p.kind), state: .idle)
+        }
+        state = .attention
+    }
+
     var linkedCount: Int { printers.count }
 
     // MARK: State machine (handoff §"State machine")
