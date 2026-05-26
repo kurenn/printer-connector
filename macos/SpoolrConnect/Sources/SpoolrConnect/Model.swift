@@ -42,16 +42,7 @@ struct DiscoveredPrinter: Identifiable, Equatable {
     var host: String
 }
 
-enum PairStepState { case done, active, pending }
-
-struct PairStep: Identifiable, Equatable {
-    let id = UUID()
-    var label: String
-    var state: PairStepState
-    var time: String?
-}
-
-/// The five popover views. Maps to agent state per the handoff's state machine.
+/// The popover views. Maps to agent state per the handoff's state machine.
 enum PopoverState: Equatable {
     case attention   // home (Attention Mode)
     case empty       // linked, 0 printers
@@ -59,7 +50,6 @@ enum PopoverState: Equatable {
     case scanning    // per-printer discovery in progress
     case linking         // discovering + registering all under a token
     case bambuCredentials // enter access codes for discovered Bambu printers
-    case pairing         // handshake with a single discovered printer
     case justPaired      // success, auto-times-out back to attention
 }
 
@@ -92,8 +82,9 @@ final class FleetModel: ObservableObject {
     // single blocking call (no streamed per-host progress), so the scanning view
     // shows a cycling, on-theme loader while this is true instead of a frozen 0/254.
     @Published var scanInProgress = false
+    // The discovered printer the user tapped "Pair" on — carried into the token
+    // step as context. Pairing itself always runs the real token→register flow.
     @Published var pairingTarget: DiscoveredPrinter?
-    @Published var pairSteps: [PairStep] = []
     @Published var justPairedPrinter: Printer?
 
     // Token-based "register everything" flow.
@@ -187,6 +178,7 @@ final class FleetModel: ObservableObject {
     // view to show. These also document the legal transitions.
 
     func showTokenEntry() {
+        pairingTarget = nil // generic entry — not tied to a specific discovered printer
         linkError = nil
         state = .tokenEntry
     }
@@ -271,7 +263,7 @@ final class FleetModel: ObservableObject {
             case .success(let payload):
                 self.scanTotal = max(payload.hosts_total, 1)
                 self.scanProbed = payload.hosts_probed
-                self.discovered = payload.printers.map { hit in
+                let hits = payload.printers.map { hit in
                     DiscoveredPrinter(id: "\(hit.host):\(hit.port)",
                                       name: hit.name,
                                       kind: Self.kind(from: hit.kind),
@@ -279,6 +271,10 @@ final class FleetModel: ObservableObject {
                                       status: .discovered,
                                       host: hit.host)
                 }
+                // Hide printers already linked to this connector — a rescan should
+                // surface only what's NEW, not re-offer ones you've added.
+                let linkedHosts = ConnectorConfig.load(path: AgentService.configPath())?.registeredHosts ?? []
+                self.discovered = Self.unlinkedDiscoveries(hits, linkedHosts: linkedHosts)
             case .failure:
                 // No bundled helper (e.g. `swift run`) — keep the demo flowing.
                 self.scanProbed = self.scanTotal
@@ -322,25 +318,20 @@ final class FleetModel: ObservableObject {
                           detail: "Probing… port 80, 5000, 7125", status: .checking, host: "10.0.1.118"),
     ]
 
-    func beginPairing(_ target: DiscoveredPrinter) {
-        pairingTarget = target
-        pairSteps = [
-            PairStep(label: "TCP handshake", state: .done, time: "0.4s"),
-            PairStep(label: "Pushing pairing key", state: .done, time: "0.3s"),
-            PairStep(label: "Reading capabilities", state: .active, time: nil),
-            PairStep(label: "Subscribing to status", state: .pending, time: nil),
-        ]
-        state = .pairing
+    /// Discovered printers that aren't already linked to this connector.
+    static func unlinkedDiscoveries(_ hits: [DiscoveredPrinter], linkedHosts: Set<String>) -> [DiscoveredPrinter] {
+        hits.filter { !linkedHosts.contains($0.host) }
     }
 
-    func completePairing() {
-        guard let target = pairingTarget else { state = .attention; return }
-        let paired = Printer(id: target.id,
-                             name: target.name.replacingOccurrences(of: ".local", with: ""),
-                             kind: target.kind, state: .idle, temp: "24°C", location: nil)
-        justPairedPrinter = paired
-        if !printers.contains(where: { $0.id == paired.id }) { printers.append(paired) }
-        state = .justPaired
+    /// Tapping "Pair" on a discovered printer routes into the REAL token flow —
+    /// pairing requires a code (the auth boundary), and `register` then discovers
+    /// and links every printer on the network. (No fake handshake; the actual
+    /// progress is shown by the token→register `.linking` step.) The tapped
+    /// printer is carried as context for the token screen.
+    func beginPairing(_ target: DiscoveredPrinter) {
+        pairingTarget = target
+        linkError = nil
+        state = .tokenEntry
     }
 
     /// Just-paired auto-returns to Attention Mode after ~6s (handoff §behavior).
@@ -348,6 +339,7 @@ final class FleetModel: ObservableObject {
         justPairedPrinter = nil
         pairingTarget = nil
         linkedPrinters = []
+        discovered = [] // the printers we just linked are stale now — a rescan re-discovers
         state = .attention
     }
 
