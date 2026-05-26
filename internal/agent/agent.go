@@ -109,6 +109,8 @@ func (a *Agent) Run(ctx context.Context) error {
 		_ = a.pollAndExecuteCommands(ctx)
 		_ = a.collectAndPushSnapshots(ctx)
 		_ = a.processWebcamRequests(ctx)
+		// Webcam streaming is a long-lived relay, not a one-shot poll, so it is
+		// intentionally skipped in --once mode.
 		return nil
 	}
 
@@ -119,11 +121,12 @@ func (a *Agent) Run(ctx context.Context) error {
 	// Each loop is supervised: a panic or unexpected return is recovered, logged
 	// loudly, and the loop restarted, so one faulting loop can neither vanish
 	// silently nor crash the sibling loops (heartbeat, commands, webcam).
-	errCh := make(chan error, 5)
+	errCh := make(chan error, 6)
 	go func() { errCh <- a.superviseLoop(ctx, "heartbeat", a.heartbeatLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "commands", a.commandsLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "snapshots", a.snapshotsLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "webcam", a.webcamLoop) }()
+	go func() { errCh <- a.superviseLoop(ctx, "webcam_stream", a.webcamStreamLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "watchdog", a.watchdogLoop) }()
 
 	select {

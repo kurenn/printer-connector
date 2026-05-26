@@ -21,8 +21,12 @@ type Client struct {
 	connectorID     string
 	connectorSecret string
 	httpClient      *http.Client
-	logger          *slog.Logger
-	userAgent       string
+	// streamFrameClient uploads live-stream frames. Separate from httpClient so
+	// rapid frame pushes reuse their own keep-alive pool and a per-frame timeout
+	// generous enough for a small JPEG over a busy uplink without the 5s API cap.
+	streamFrameClient *http.Client
+	logger            *slog.Logger
+	userAgent         string
 }
 
 type Options struct {
@@ -41,6 +45,13 @@ func New(opts Options) *Client {
 		IdleConnTimeout:       30 * time.Second,
 	}
 
+	streamFrameTransport := &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   3 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
+		IdleConnTimeout:       30 * time.Second,
+	}
+
 	return &Client{
 		baseURL:         strings.TrimRight(opts.BaseURL, "/"),
 		connectorID:     opts.ConnectorID,
@@ -48,6 +59,10 @@ func New(opts Options) *Client {
 		httpClient: &http.Client{
 			Timeout:   5 * time.Second,
 			Transport: transport,
+		},
+		streamFrameClient: &http.Client{
+			Timeout:   8 * time.Second,
+			Transport: streamFrameTransport,
 		},
 		logger:    opts.Logger,
 		userAgent: opts.UserAgent,
@@ -278,6 +293,53 @@ func (c *Client) GetWebcamRequests(ctx context.Context, limit int) ([]WebcamRequ
 		return nil, err
 	}
 	return out, nil
+}
+
+// GetWebcamStreamRequests fetches the printers a browser is actively watching,
+// so the connector knows which printers to relay a high-cadence MJPEG feed for.
+// Returns an empty slice when no one is watching (the common, cheap case).
+func (c *Client) GetWebcamStreamRequests(ctx context.Context) ([]WebcamStreamRequest, error) {
+	path := fmt.Sprintf("/api/v1/connectors/%s/webcam_stream", url.PathEscape(c.connectorID))
+	var out []WebcamStreamRequest
+	if err := c.doJSON(ctx, http.MethodGet, path, c.authHeaders(), nil, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UploadWebcamStreamFrame pushes a single live-stream frame for a printer to the
+// cloud's fast frame endpoint, which stores only the latest frame (in cache, not
+// ActiveStorage) for the browser to poll. Uses the streaming client (no short
+// total timeout) since frames are pushed rapidly in a relay loop.
+func (c *Client) UploadWebcamStreamFrame(ctx context.Context, printerID int, frame []byte, contentType string) error {
+	path := fmt.Sprintf("/api/v1/printers/%d/webcam_stream_frame", printerID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, c.baseURL+path, bytes.NewReader(frame))
+	if err != nil {
+		return fmt.Errorf("failed to create stream frame request: %w", err)
+	}
+	for k, v := range c.authHeaders() {
+		req.Header.Set(k, v)
+	}
+	req.Header.Set("Content-Type", contentType)
+	if c.userAgent != "" {
+		req.Header.Set("User-Agent", c.userAgent)
+	}
+
+	resp, err := c.streamFrameClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("stream frame upload failed: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respBody))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return fmt.Errorf("stream frame upload failed with status %d: %s", resp.StatusCode, msg)
+	}
+	return nil
 }
 
 // UploadWebcamSnapshot uploads a webcam snapshot image to Rails

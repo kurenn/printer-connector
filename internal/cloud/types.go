@@ -93,3 +93,13 @@ type WebcamRequest struct {
 	PrinterID int            `json:"printer_id"`
 	CreatedAt string         `json:"created_at,omitempty"`
 }
+
+// WebcamStreamRequest is a printer a browser is actively watching, returned by
+// the stream-poll endpoint. The connector relays a high-cadence MJPEG feed for
+// it until ExpiresInMs elapses (the viewer refreshes the window by continuing
+// to watch). This is the "stream mode" path that makes the live feed smooth;
+// the per-frame snapshot relay is the always-present fallback.
+type WebcamStreamRequest struct {
+	PrinterID   int `json:"printer_id"`
+	ExpiresInMs int `json:"expires_in_ms"`
+}

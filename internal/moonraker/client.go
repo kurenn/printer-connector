@@ -78,6 +78,20 @@ func New(baseURL string, uiPort int) *Client {
 	}
 }
 
+// streamClient returns an HTTP client suitable for a long-lived MJPEG stream:
+// it keeps the dial/header timeouts but drops the short total Timeout (which is
+// meant for one-shot API calls and would abort the stream after 5s). The stream
+// is instead bounded by the request context the caller passes.
+func (c *Client) streamClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
+			ResponseHeaderTimeout: 5 * time.Second,
+			IdleConnTimeout:       30 * time.Second,
+		},
+	}
+}
+
 func (c *Client) QueryObjects(ctx context.Context) (map[string]any, error) {
 	objects := map[string]any{
 		"print_stats":    nil,
