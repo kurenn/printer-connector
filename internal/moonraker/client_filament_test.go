@@ -12,12 +12,12 @@ import (
 // mockMoonraker serves /printer/objects/list and /printer/objects/query and
 // records how many times each is hit plus the object keys requested in the query.
 type mockMoonraker struct {
-	mu           sync.Mutex
-	listCalls    int
-	queryCalls   int
+	mu            sync.Mutex
+	listCalls     int
+	queryCalls    int
 	lastQueryKeys map[string]bool
-	listStatus   int      // status to return for objects/list (default 200)
-	objects      []string // object names objects/list advertises
+	listStatus    int      // status to return for objects/list (default 200)
+	objects       []string // object names objects/list advertises
 }
 
 func (m *mockMoonraker) handler(t *testing.T) http.HandlerFunc {

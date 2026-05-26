@@ -20,8 +20,10 @@ import (
 // no-ops that satisfy the driver.Driver interface.
 type failingDriver struct{ err error }
 
-func (f *failingDriver) Capabilities() []string                                      { return nil }
-func (f *failingDriver) Telemetry(_ context.Context) (driver.Telemetry, error)       { return driver.Telemetry{}, nil }
+func (f *failingDriver) Capabilities() []string { return nil }
+func (f *failingDriver) Telemetry(_ context.Context) (driver.Telemetry, error) {
+	return driver.Telemetry{}, nil
+}
 func (f *failingDriver) QueryObjects(_ context.Context) (map[string]any, error)      { return nil, nil }
 func (f *failingDriver) NormalizeRaw(_ map[string]any) driver.Telemetry              { return driver.Telemetry{} }
 func (f *failingDriver) Pause(_ context.Context) error                               { return nil }
