@@ -74,14 +74,17 @@ APP_ABS="$(pwd)/$APP"
 DIST_ABS="$(pwd)/$DIST"
 REPO_ROOT="$(cd ../.. && pwd)"
 HELPER="$APP_ABS/Contents/Resources/printer-connector"
+# Stamp the bundled helper with the app version (matches the release workflow),
+# so it reports the same version as the .app rather than the "dev" default.
+LDFLAGS="-X main.version=$VERSION"
 if $UNIVERSAL; then
   echo "  (universal: arm64 + x86_64)"
-  ( cd "$REPO_ROOT" && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -o "$DIST_ABS/pc-arm64" ./cmd/connector )
-  ( cd "$REPO_ROOT" && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -o "$DIST_ABS/pc-amd64" ./cmd/connector )
+  ( cd "$REPO_ROOT" && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "$LDFLAGS" -o "$DIST_ABS/pc-arm64" ./cmd/connector )
+  ( cd "$REPO_ROOT" && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o "$DIST_ABS/pc-amd64" ./cmd/connector )
   lipo -create "$DIST_ABS/pc-arm64" "$DIST_ABS/pc-amd64" -output "$HELPER"
   rm -f "$DIST_ABS/pc-arm64" "$DIST_ABS/pc-amd64"
 else
-  ( cd "$REPO_ROOT" && go build -o "$HELPER" ./cmd/connector )
+  ( cd "$REPO_ROOT" && go build -ldflags "$LDFLAGS" -o "$HELPER" ./cmd/connector )
 fi
 
 echo "▸ ad-hoc codesign"
