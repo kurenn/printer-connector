@@ -22,7 +22,10 @@ import (
 	"printer-connector/internal/discovery"
 )
 
-var version = "0.1.0"
+// version is the single source of truth, overridden at build time via
+// -ldflags "-X main.version=<v>" by the release workflow and build_app.sh.
+// A plain `go build` reports "dev".
+var version = "dev"
 
 // bambuFlag collects repeated --bambu specs ("host,serial,accesscode,name").
 type bambuFlag []string
