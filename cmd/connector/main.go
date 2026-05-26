@@ -288,6 +288,44 @@ func main() {
 		case "register":
 			runRegister()
 			return
+		case "run-service":
+			// run-service --config <path>
+			// Called by the Windows Service Control Manager to start the agent as a
+			// Windows Service. On non-Windows platforms this prints an error and exits.
+			fs := flag.NewFlagSet("run-service", flag.ExitOnError)
+			cfgPath := fs.String("config", windowsConfigPath(), "Path to config JSON")
+			_ = fs.Parse(os.Args[2:])
+			if err := runService(*cfgPath); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			return
+		case "install-service":
+			// install-service --config <path>
+			// Registers and starts the Spoolr Connect Windows Service. Idempotent.
+			fs := flag.NewFlagSet("install-service", flag.ExitOnError)
+			cfgPath := fs.String("config", windowsConfigPath(), "Path to config JSON")
+			_ = fs.Parse(os.Args[2:])
+			exePath, err := os.Executable()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "error: could not resolve executable path:", err)
+				os.Exit(1)
+			}
+			if err := installService(exePath, *cfgPath); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			fmt.Println("Spoolr Connect service installed and started.")
+			return
+		case "uninstall-service":
+			// uninstall-service
+			// Stops and removes the Spoolr Connect Windows Service.
+			if err := removeService(); err != nil {
+				fmt.Fprintln(os.Stderr, "error:", err)
+				os.Exit(1)
+			}
+			fmt.Println("Spoolr Connect service removed.")
+			return
 		}
 	}
 

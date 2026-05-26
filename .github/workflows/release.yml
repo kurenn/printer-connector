@@ -99,3 +99,52 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: macos/SpoolrConnect/dist/SpoolrConnect-macos.zip
+
+  # Windows GUI installer: an Inno Setup–packaged .exe that collects the pairing
+  # code, runs "register", and installs the connector as a Windows Service.
+  # The binary is UNSIGNED (no Authenticode cert); SmartScreen will warn — users
+  # dismiss it with "More info" → "Run anyway". See docs/INSTALL-Windows.md.
+  build-windows-installer:
+    name: build · Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.22"
+
+      - name: Build Windows connector binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        # Strip the leading 'v' from the tag for the Go version string.
+        # GITHUB_REF_NAME is "v1.2.3"; we pass "1.2.3" to -X main.version.
+        run: |
+          $version = "${{ github.ref_name }}"
+          $semver = $version.TrimStart('v')
+          $ldflags = "-s -w -X main.version=$semver"
+          go build -trimpath -ldflags "$ldflags" -o printer-connector.exe ./cmd/connector
+
+      - name: Install Inno Setup 6
+        run: choco install innosetup --yes --no-progress
+
+      - name: Compile installer
+        run: |
+          $version = "${{ github.ref_name }}"
+          $semver = $version.TrimStart('v')
+          # ISCC.exe is installed by Chocolatey into Program Files (x86)\Inno Setup 6.
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            /DAppVersion=$semver `
+            windows\installer.iss
+          # Verify the output file was created.
+          if (-not (Test-Path "windows\Output\SpoolrConnect-Setup.exe")) {
+            Write-Error "Installer was not produced — ISCC may have failed."
+            exit 1
+          }
+
+      - name: Publish installer to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: windows/Output/SpoolrConnect-Setup.exe
