@@ -207,6 +207,17 @@ browser download instead shows a one-time Gatekeeper prompt. See
 **[docs/INSTALL-macOS.md](docs/INSTALL-macOS.md)** for the download/"Open Anyway"
 flow and build-from-source instructions.
 
+#### Option 4: Windows (GUI installer)
+
+Download **`SpoolrConnect-Setup.exe`** from the
+[latest release](https://github.com/kurenn/printer-connector/releases/latest)
+and run it. The wizard collects your pairing code and installs the connector as
+the **Spoolr Connect** Windows Service (auto-start, background — no desktop window).
+
+The installer is unsigned (no Authenticode cert); SmartScreen will warn. See
+**[docs/INSTALL-Windows.md](docs/INSTALL-Windows.md)** for the full walkthrough,
+including how to dismiss the SmartScreen dialog and verify the service is running.
+
 ### What the Installer Does
 
 1. ✅ Creates installation directory
