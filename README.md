@@ -192,6 +192,21 @@ chmod +x install-k1.sh
 sudo sh install-k1.sh
 ```
 
+#### Option 3: macOS menu-bar app (Spoolr Connect)
+
+Prefer a desktop app to scan, pair, and run the connector from your Mac? Install
+the **Spoolr Connect** menu-bar app (universal, Apple Silicon + Intel) with **one
+command** — no security prompt this way:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash
+```
+
+The app is ad-hoc signed (not notarized — Spoolr has no paid Apple account), so a
+browser download instead shows a one-time Gatekeeper prompt. See
+**[docs/INSTALL-macOS.md](docs/INSTALL-macOS.md)** for the download/"Open Anyway"
+flow and build-from-source instructions.
+
 ### What the Installer Does
 
 1. ✅ Creates installation directory

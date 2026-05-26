@@ -69,3 +69,33 @@ jobs:
             dist/printer-connector-darwin-amd64
             dist/printer-connector-windows-amd64.exe
             dist/SHA256SUMS
+
+  # The Spoolr Connect menu-bar app: a universal (arm64 + x86_64), ad-hoc-signed
+  # .app. NOT Developer-ID signed or notarized (no paid Apple account), so users
+  # install via install-macos.sh (no quarantine) or clear quarantine manually —
+  # see README "Installing on macOS". Needs a macOS runner for swift + codesign.
+  build-macos-app:
+    name: build · package menu-bar app
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build universal Spoolr Connect.app
+        env:
+          APP_VERSION: ${{ github.ref_name }}
+        run: macos/SpoolrConnect/scripts/build_app.sh --universal
+
+      - name: Zip the app (ditto preserves the bundle + ad-hoc signature)
+        run: |
+          cd macos/SpoolrConnect/dist
+          ditto -c -k --keepParent "Spoolr Connect.app" "SpoolrConnect-macos.zip"
+          shasum -a 256 SpoolrConnect-macos.zip
+
+      - name: Publish app to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: macos/SpoolrConnect/dist/SpoolrConnect-macos.zip
