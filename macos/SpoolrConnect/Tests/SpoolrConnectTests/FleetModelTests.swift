@@ -33,47 +33,49 @@ final class FleetModelTests: XCTestCase {
                        "loader phrases should be unique")
     }
 
-    func testBeginPairingEntersPairingWithSteps() {
+    func testBeginPairingRoutesIntoRealTokenFlow() {
         let model = FleetModel()
         model.beginScan()
         let target = model.discovered.first { $0.status == .discovered }!
         model.beginPairing(target)
-        XCTAssertEqual(model.state, .pairing)
+        // No fake handshake: tapping a discovered printer routes into the REAL
+        // token→register flow, carrying the tapped printer as context.
+        XCTAssertEqual(model.state, .tokenEntry)
         XCTAssertEqual(model.pairingTarget, target)
-        XCTAssertEqual(model.pairSteps.count, 4)
-        XCTAssertTrue(model.pairSteps.contains { $0.state == .active })
+        XCTAssertNil(model.linkError)
     }
 
-    func testCompletePairingAddsPrinterAndShowsSuccess() {
+    func testShowTokenEntryClearsPairingTargetContext() {
         let model = FleetModel()
         model.beginScan()
-        let target = model.discovered.first { $0.status == .discovered }!
-        let before = model.printers.count
-        model.beginPairing(target)
-        model.completePairing()
-        XCTAssertEqual(model.state, .justPaired)
-        XCTAssertNotNil(model.justPairedPrinter)
-        XCTAssertEqual(model.printers.count, before + 1)
-    }
-
-    func testCompletePairingIsIdempotentOnPrinterList() {
-        let model = FleetModel()
-        model.beginScan()
-        let target = model.discovered.first { $0.status == .discovered }!
-        model.beginPairing(target)
-        model.completePairing()
-        let count = model.printers.count
-        model.completePairing() // same target, should not duplicate
-        XCTAssertEqual(model.printers.count, count)
+        model.beginPairing(model.discovered.first { $0.status == .discovered }!)
+        model.showTokenEntry() // generic entry (e.g. "Add more printers") — no specific target
+        XCTAssertEqual(model.state, .tokenEntry)
+        XCTAssertNil(model.pairingTarget)
     }
 
     func testDismissJustPairedReturnsToAttention() {
         let model = FleetModel()
-        model.beginScan()
-        model.beginPairing(model.discovered.first { $0.status == .discovered }!)
-        model.completePairing()
+        model.state = .justPaired
+        model.justPairedPrinter = model.printers.first
         model.dismissJustPaired()
         XCTAssertEqual(model.state, .attention)
         XCTAssertNil(model.justPairedPrinter)
+    }
+
+    // MARK: - Rescan hides already-linked printers (issue: don't re-offer added ones)
+
+    func testUnlinkedDiscoveriesHidesAlreadyLinkedHosts() {
+        let hits = [
+            DiscoveredPrinter(id: "a", name: "K1", kind: .klipper, detail: "", status: .discovered, host: "192.168.68.70"),
+            DiscoveredPrinter(id: "b", name: "new", kind: .klipper, detail: "", status: .discovered, host: "192.168.68.99"),
+        ]
+        let result = FleetModel.unlinkedDiscoveries(hits, linkedHosts: ["192.168.68.70"])
+        XCTAssertEqual(result.map(\.host), ["192.168.68.99"], "already-linked host is hidden; the new one remains")
+    }
+
+    func testUnlinkedDiscoveriesKeepsAllWhenNothingLinked() {
+        let hits = [DiscoveredPrinter(id: "a", name: "K1", kind: .klipper, detail: "", status: .discovered, host: "10.0.0.5")]
+        XCTAssertEqual(FleetModel.unlinkedDiscoveries(hits, linkedHosts: []).count, 1)
     }
 }

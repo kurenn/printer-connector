@@ -195,151 +195,7 @@ private struct ScanRow: View {
     }
 }
 
-// MARK: - State 3 · Pairing handshake
-
-struct PairingView: View {
-    @EnvironmentObject var model: FleetModel
-
-    var body: some View {
-        VStack(spacing: 0) {
-            BrandHeader(title: "Pairing…",
-                        subtitle: "Negotiating with \(model.pairingTarget?.host ?? "")") {
-                HeaderLink(label: "Cancel") { model.backToAttention() }
-            }
-
-            VStack(spacing: 0) {
-                PairTrio(kind: model.pairingTarget?.kind ?? .printer)
-                Text(model.pairingTarget?.name ?? "")
-                    .font(Theme.sans(13.5, weight: .medium)).foregroundColor(Theme.text1)
-                Text("\(model.pairingTarget?.detail ?? "")")
-                    .font(Theme.mono(11)).foregroundColor(Theme.text3).padding(.top, 3).lineLimit(1)
-
-                VStack(spacing: 7) {
-                    ForEach(model.pairSteps) { PairStepRow(step: $0) }
-                }
-                .padding(.top, 14)
-                .overlay(Rectangle().fill(Color.white.opacity(0.06)).frame(height: 0.5), alignment: .top)
-                .padding(.top, 12)
-            }
-            .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 14)
-            .background(LinearGradient(colors: [Theme.accent.opacity(0.04), Color.white.opacity(0.01)],
-                                       startPoint: .top, endPoint: .bottom))
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusInner, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.radiusInner, style: .continuous)
-                .stroke(Theme.accent.opacity(0.16), lineWidth: 0.5))
-            .padding(.horizontal, 12).padding(.top, 4).padding(.bottom, 8)
-
-            FootStrip(left: "PAIRING · 1 of 1", rightLabel: "")
-        }
-        // Demonstrate the flow: handshake completes after a short beat.
-        .task {
-            try? await Task.sleep(nanoseconds: 2_300_000_000)
-            if case .pairing = model.state { model.completePairing() }
-        }
-    }
-}
-
-private struct PairTrio: View {
-    var kind: PrinterKind
-    var body: some View {
-        HStack(spacing: 8) {
-            node(agent: true) { SpoolrMark(size: 18) }
-            PairDots()
-            node(agent: false) { Image(systemName: Glyph.symbol(for: kind)).font(.system(size: 18)).foregroundColor(Theme.text2) }
-        }
-        .frame(maxWidth: 200)
-        .padding(.bottom, 12)
-    }
-
-    private func node<Content: View>(agent: Bool, @ViewBuilder _ content: () -> Content) -> some View {
-        content()
-            .frame(width: 36, height: 36)
-            .background(
-                agent
-                    ? AnyView(RadialGradient(colors: [Theme.accent.opacity(0.2), .clear],
-                                             center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 24)
-                        .background(Theme.surface2))
-                    : AnyView(Theme.surface2)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(Color.white.opacity(0.07), lineWidth: 0.5))
-    }
-}
-
-private struct PairDots: View {
-    @State private var animate = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<3, id: \.self) { i in
-                Circle().fill(Theme.accent)
-                    .frame(width: 5, height: 5)
-                    .opacity(animate ? 1 : 0.25)
-                    .scaleEffect(animate ? 1.3 : 1)
-                    .animation(reduceMotion ? nil :
-                        .easeInOut(duration: 1.2).repeatForever().delay(Double(i) * 0.2), value: animate)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .onAppear { animate = true }
-    }
-}
-
-private struct PairStepRow: View {
-    var step: PairStep
-    var body: some View {
-        HStack(spacing: 9) {
-            mark.frame(width: 16, height: 16)
-            Text(step.label).font(Theme.sans(11.5)).tracking(-0.07).foregroundColor(labelColor)
-            Spacer(minLength: 4)
-            if let t = step.time { Text(t).font(Theme.mono(10)).foregroundColor(Theme.text3) }
-        }
-    }
-
-    @ViewBuilder private var mark: some View {
-        switch step.state {
-        case .done:
-            ZStack {
-                Circle().fill(Theme.accent)
-                Image(systemName: "checkmark").font(.system(size: 8, weight: .bold)).foregroundColor(Theme.onAccent)
-            }
-        case .active:
-            ZStack {
-                Circle().fill(Theme.accent.opacity(0.06)).overlay(Circle().stroke(Theme.accent, lineWidth: 0.5))
-                Spinner()
-            }
-        case .pending:
-            Circle().fill(Theme.surface3).overlay(Circle().stroke(Color.white.opacity(0.06), lineWidth: 0.5))
-                .overlay(Circle().fill(Theme.text4).frame(width: 4, height: 4))
-        }
-    }
-
-    private var labelColor: Color {
-        switch step.state {
-        case .done:    return Theme.text1
-        case .active:  return Theme.accent
-        case .pending: return Theme.text3
-        }
-    }
-}
-
-private struct Spinner: View {
-    @State private var spin = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.75)
-            .stroke(Theme.accent, style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
-            .frame(width: 9, height: 9)
-            .rotationEffect(.degrees(spin ? 360 : 0))
-            .onAppear {
-                guard !reduceMotion else { return }
-                withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) { spin = true }
-            }
-    }
-}
-
-// MARK: - State 4 · Just paired (success)
+// MARK: - State 3 · Just paired (success)
 
 struct JustPairedView: View {
     @EnvironmentObject var model: FleetModel
@@ -428,7 +284,8 @@ struct TokenEntryView: View {
                 }
                 .frame(width: 54, height: 54).padding(.bottom, 12)
 
-                Text("Link this network").font(Theme.sans(14, weight: .medium)).foregroundColor(Theme.text1)
+                Text(model.pairingTarget == nil ? "Link this network" : "Link \(model.pairingTarget!.name)")
+                    .font(Theme.sans(14, weight: .medium)).foregroundColor(Theme.text1)
                 Text("Paste the pairing code from your Spoolr dashboard. Connect finds every printer on this network and links them all.")
                     .font(Theme.sans(12)).foregroundColor(Theme.text3)
                     .multilineTextAlignment(.center).lineSpacing(2).padding(.top, 5)

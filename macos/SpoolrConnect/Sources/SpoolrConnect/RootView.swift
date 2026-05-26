@@ -30,7 +30,6 @@ struct RootView: View {
         case .scanning:   ScanningView()
         case .linking:    LinkingView()
         case .bambuCredentials: BambuCredentialsView()
-        case .pairing:    PairingView()
         case .justPaired: JustPairedView()
         }
     }
