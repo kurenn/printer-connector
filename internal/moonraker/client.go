@@ -18,6 +18,7 @@ import (
 type Client struct {
 	baseURL    string
 	uiBaseURL  string
+	host       string // bare hostname/IP from baseURL, for building camera URLs
 	httpClient *http.Client
 
 	// Filament-sensor object names (e.g. "filament_switch_sensor runout") are
@@ -62,6 +63,7 @@ func New(baseURL string, uiPort int) *Client {
 	return &Client{
 		baseURL:   strings.TrimRight(baseURL, "/"),
 		uiBaseURL: strings.TrimRight(uiBaseURL, "/"),
+		host:      parsedURL.Hostname(),
 		httpClient: &http.Client{
 			Timeout:   5 * time.Second,
 			Transport: transport,
@@ -418,66 +420,131 @@ func (c *Client) ListFiles(ctx context.Context) ([]map[string]any, error) {
 // GetWebcamSnapshot retrieves a webcam snapshot from Moonraker
 // Returns the image bytes and content type, or an error
 func (c *Client) GetWebcamSnapshot(ctx context.Context) ([]byte, string, error) {
-	// Try the most common webcam endpoints
-	endpoints := []string{
-		"/webcam/?action=snapshot",
-		"/webcam/snapshot",
-		"/server/webcam/snapshot",
-	}
-
 	var lastErr error
-	for _, endpoint := range endpoints {
-		u := c.uiBaseURL + endpoint
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-		if err != nil {
-			lastErr = err
-			continue
+	for _, u := range c.webcamSnapshotURLs(ctx) {
+		img, ctype, err := c.fetchSnapshot(ctx, u)
+		if err == nil {
+			return img, ctype, nil
 		}
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		// Success - return the image. Close explicitly rather than via defer:
-		// this runs in a loop, so a deferred close would leak every probed
-		// endpoint's body until the whole function returns.
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			// Limit to 10MB for safety
-			imageData, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
-			resp.Body.Close()
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to read snapshot: %w", err)
-			}
-
-			contentType := resp.Header.Get("Content-Type")
-			if contentType == "" {
-				contentType = "image/jpeg" // Default assumption
-			}
-
-			return imageData, contentType, nil
-		}
-
-		// 404 means try next endpoint
-		if resp.StatusCode == 404 {
-			resp.Body.Close()
-			continue
-		}
-
-		// Other error - read response and return
-		respB, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		resp.Body.Close()
-		msg := strings.TrimSpace(string(respB))
-		if msg == "" {
-			msg = resp.Status
-		}
-		lastErr = fmt.Errorf("moonraker http %d: %s", resp.StatusCode, msg)
+		lastErr = err
 	}
-
 	if lastErr != nil {
 		return nil, "", fmt.Errorf("failed to fetch webcam snapshot: %w", lastErr)
 	}
-
 	return nil, "", fmt.Errorf("no working webcam endpoint found")
+}
+
+// fetchSnapshot GETs a single candidate URL, returning the image on a 2xx and
+// an error otherwise (so the caller advances to the next candidate).
+func (c *Client) fetchSnapshot(ctx context.Context, u string) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		img, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB cap
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to read snapshot: %w", err)
+		}
+		ctype := resp.Header.Get("Content-Type")
+		if ctype == "" {
+			ctype = "image/jpeg"
+		}
+		return img, ctype, nil
+	}
+
+	respB, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	msg := strings.TrimSpace(string(respB))
+	if msg == "" {
+		msg = resp.Status
+	}
+	return nil, "", fmt.Errorf("moonraker http %d: %s", resp.StatusCode, msg)
+}
+
+// webcamSnapshotURLs returns ordered, de-duplicated snapshot URLs to try. It
+// blends three sources so it works across setups:
+//  1. the snapshot_url Moonraker actually reports (/server/webcams/list);
+//  2. the mjpg-streamer default port 8080, where many Klipper cams — including
+//     the Creality K1, whose camera lives at :8080/?action=snapshot rather than
+//     a proxied /webcam/ path — serve frames directly;
+//  3. the legacy proxied paths on the UI host, for vanilla Mainsail/Fluidd.
+func (c *Client) webcamSnapshotURLs(ctx context.Context) []string {
+	var urls []string
+	seen := map[string]bool{}
+	add := func(u string) {
+		if u == "" || seen[u] {
+			return
+		}
+		seen[u] = true
+		urls = append(urls, u)
+	}
+
+	// (1) Whatever Moonraker says the configured camera's snapshot URL is.
+	if path := c.discoverSnapshotPath(ctx); path != "" {
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			add(path) // absolute — use verbatim
+		} else {
+			rel := "/" + strings.TrimLeft(path, "/")
+			add(c.uiBaseURL + rel) // proxied via the UI host (vanilla setups)
+			if c.host != "" {
+				add(fmt.Sprintf("http://%s:8080%s", c.host, rel)) // same path on the streamer port
+			}
+		}
+	}
+
+	// (2) mjpg-streamer default — the K1 serves frames here.
+	if c.host != "" {
+		add(fmt.Sprintf("http://%s:8080/?action=snapshot", c.host))
+		add(fmt.Sprintf("http://%s:8080/webcam/?action=snapshot", c.host))
+	}
+
+	// (3) Legacy proxied paths on the UI host (back-compat with the old logic).
+	add(c.uiBaseURL + "/webcam/?action=snapshot")
+	add(c.uiBaseURL + "/webcam/snapshot")
+	add(c.uiBaseURL + "/server/webcam/snapshot")
+
+	return urls
+}
+
+// discoverSnapshotPath asks Moonraker for the configured webcam's snapshot URL.
+// Best-effort: any error (no camera, older Moonraker) returns "".
+func (c *Client) discoverSnapshotPath(ctx context.Context) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/server/webcams/list", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ""
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return ""
+	}
+	var out struct {
+		Result struct {
+			Webcams []struct {
+				SnapshotURL string `json:"snapshot_url"`
+			} `json:"webcams"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return ""
+	}
+	for _, w := range out.Result.Webcams {
+		if w.SnapshotURL != "" {
+			return w.SnapshotURL
+		}
+	}
+	return ""
 }
