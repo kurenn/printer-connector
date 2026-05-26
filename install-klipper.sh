@@ -259,7 +259,7 @@ ExecStart=$BIN_FILE --config $CONFIG_FILE --log-level info
 Restart=always
 RestartSec=10
 # For development, uncomment and set your local URL:
-# Environment="CLOUD_URL=http://192.168.68.50:3000"
+# Environment="CLOUD_URL=http://192.168.1.50:3000"
 
 [Install]
 WantedBy=multi-user.target

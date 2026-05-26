@@ -19,3 +19,8 @@ coverage.*
 /printer-connector-amd64
 /printer-connector-arm64
 /printer-connector-mips
+
+# Local connector config — may hold a real connector secret.
+# Copy config/config.dev.example.json → config/config.dev.json and fill it in.
+config/*.json
+!config/*.example.json

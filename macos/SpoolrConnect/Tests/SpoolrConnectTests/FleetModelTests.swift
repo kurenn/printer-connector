@@ -67,11 +67,11 @@ final class FleetModelTests: XCTestCase {
 
     func testUnlinkedDiscoveriesHidesAlreadyLinkedHosts() {
         let hits = [
-            DiscoveredPrinter(id: "a", name: "K1", kind: .klipper, detail: "", status: .discovered, host: "192.168.68.70"),
-            DiscoveredPrinter(id: "b", name: "new", kind: .klipper, detail: "", status: .discovered, host: "192.168.68.99"),
+            DiscoveredPrinter(id: "a", name: "K1", kind: .klipper, detail: "", status: .discovered, host: "192.168.1.70"),
+            DiscoveredPrinter(id: "b", name: "new", kind: .klipper, detail: "", status: .discovered, host: "192.168.1.99"),
         ]
-        let result = FleetModel.unlinkedDiscoveries(hits, linkedHosts: ["192.168.68.70"])
-        XCTAssertEqual(result.map(\.host), ["192.168.68.99"], "already-linked host is hidden; the new one remains")
+        let result = FleetModel.unlinkedDiscoveries(hits, linkedHosts: ["192.168.1.70"])
+        XCTAssertEqual(result.map(\.host), ["192.168.1.99"], "already-linked host is hidden; the new one remains")
     }
 
     func testUnlinkedDiscoveriesKeepsAllWhenNothingLinked() {
