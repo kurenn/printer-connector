@@ -14,6 +14,9 @@ struct ConnectorConfig {
     /// LAN hosts (IPs) of the already-registered printers, parsed from each
     /// printer's `base_url`. Used to hide already-linked printers from a rescan.
     let registeredHosts: Set<String>
+    /// The cloud base URL this connector is paired to (connector.json `cloud_url`),
+    /// e.g. https://www.spoolr.io — opened by the "Open dashboard" action.
+    let cloudURL: String?
 
     /// Returns the parsed config only when it represents a real pairing (a
     /// non-empty connector_id). Missing file / unparseable / unpaired → nil.
@@ -28,6 +31,7 @@ struct ConnectorConfig {
         guard let id = connectorId, !id.isEmpty else { return nil } // not paired yet
 
         let workspace = (root["site_name"] as? String)?.nonEmpty
+        let cloudURL = (root["cloud_url"] as? String)?.nonEmpty
         var hosts = Set<String>()
         let printers = (root["printers"] as? [[String: Any]] ?? []).compactMap { p -> (name: String, kind: String)? in
             // Collect the host regardless of whether the printer is named, so a
@@ -38,7 +42,7 @@ struct ConnectorConfig {
             guard let name = (p["name"] as? String)?.nonEmpty else { return nil }
             return (name: name, kind: (p["type"] as? String) ?? "")
         }
-        return ConnectorConfig(connectorId: id, workspace: workspace, printers: printers, registeredHosts: hosts)
+        return ConnectorConfig(connectorId: id, workspace: workspace, printers: printers, registeredHosts: hosts, cloudURL: cloudURL)
     }
 }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import AppKit // NSWorkspace — opening the dashboard in the browser
 
 // MARK: - Domain types
 //
@@ -73,6 +74,9 @@ final class FleetModel: ObservableObject {
     // Connection metadata shown in the header / foot strip.
     @Published var workspace: String = "northshore"
     @Published var version: String = "0.18.2"
+    // The cloud the connector is paired to (from connector.json) — the "Open
+    // dashboard" target. Falls back to production when unknown.
+    @Published var cloudURL: String?
 
     // Status-file polling (paired sessions only).
     private var statusPollTimer: AnyCancellable?
@@ -175,11 +179,25 @@ final class FleetModel: ObservableObject {
     /// placeholder) — the web dashboard has the real live state.
     func applyPaired(_ config: ConnectorConfig) {
         if let ws = config.workspace { workspace = ws }
+        cloudURL = config.cloudURL
         printers = config.printers.map { p in
             Printer(id: p.name, name: p.name, kind: Self.kind(from: p.kind), state: .idle)
         }
         state = .attention
         startStatusPolling()
+    }
+
+    /// The Spoolr web app this connector talks to — the connector.json `cloud_url`,
+    /// falling back to production. Used by "Open dashboard".
+    var dashboardURL: URL? {
+        let raw = (cloudURL?.isEmpty == false ? cloudURL : nil) ?? "https://www.spoolr.io"
+        return URL(string: raw)
+    }
+
+    /// Opens the dashboard in the default browser (the "Open dashboard" action).
+    func openDashboard() {
+        guard let url = dashboardURL else { return }
+        NSWorkspace.shared.open(url)
     }
 
     // MARK: Status-file polling
