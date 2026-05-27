@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -374,6 +375,77 @@ func (c *Client) UploadFile(ctx context.Context, filename string, content []byte
 
 	respB, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(respB))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return fmt.Errorf("moonraker http %d: %s", resp.StatusCode, msg)
+	}
+
+	return nil
+}
+
+// UploadFileReader streams a file to Moonraker's file API without buffering it
+// in memory (the source can be tens/hundreds of MB), and optionally asks
+// Moonraker to start the print immediately via the `print` form field — so an
+// upload+autostart is a single atomic call with no separate StartPrint race.
+//
+// Used by the slicer-upload flow, where the bytes arrive from a cloud download
+// rather than as in-memory base64. The body is assembled through an io.Pipe so
+// the multipart stream flows straight from the reader to the socket.
+func (c *Client) UploadFileReader(ctx context.Context, filename string, r io.Reader, print bool) error {
+	u := c.baseURL + "/server/files/upload"
+
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
+
+	go func() {
+		var err error
+		defer func() { pw.CloseWithError(err) }()
+
+		part, e := writer.CreateFormFile("file", filename)
+		if e != nil {
+			err = e
+			return
+		}
+		if _, e = io.Copy(part, r); e != nil {
+			err = e
+			return
+		}
+		if e = writer.WriteField("root", "gcodes"); e != nil {
+			err = e
+			return
+		}
+		if e = writer.WriteField("print", strconv.FormatBool(print)); e != nil {
+			err = e
+			return
+		}
+		err = writer.Close()
+	}()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, pr)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	// A client without the 5s total timeout: a large upload is bounded by ctx.
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
+			ResponseHeaderTimeout: 30 * time.Second,
+			IdleConnTimeout:       30 * time.Second,
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respB, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg := strings.TrimSpace(string(respB))
 		if msg == "" {
