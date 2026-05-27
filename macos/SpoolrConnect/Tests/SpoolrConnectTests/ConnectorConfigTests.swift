@@ -95,6 +95,28 @@ final class ConnectorConfigTests: XCTestCase {
         XCTAssertEqual(model.workspace, defaultWorkspace, "absent site_name leaves the workspace untouched")
     }
 
+    // MARK: - cloud_url / Open dashboard
+
+    func testLoadParsesCloudURL() {
+        let path = writeTemp(#"{"connector_id":"2","cloud_url":"https://www.spoolr.io","printers":[]}"#)
+        XCTAssertEqual(ConnectorConfig.load(path: path)?.cloudURL, "https://www.spoolr.io")
+    }
+
+    func testApplyPairedSetsDashboardURLFromCloudURL() {
+        let path = writeTemp(#"{"connector_id":"2","cloud_url":"https://www.spoolr.io","printers":[{"name":"K1","type":"klipper"}]}"#)
+        let model = FleetModel(loadSample: false)
+        model.applyPaired(ConnectorConfig.load(path: path)!)
+        XCTAssertEqual(model.dashboardURL, URL(string: "https://www.spoolr.io"))
+    }
+
+    func testDashboardURLFallsBackToProductionWhenCloudURLAbsent() {
+        let path = writeTemp(#"{"connector_id":"2","printers":[{"name":"K1","type":"klipper"}]}"#)
+        let model = FleetModel(loadSample: false)
+        model.applyPaired(ConnectorConfig.load(path: path)!)
+        XCTAssertNil(model.cloudURL)
+        XCTAssertEqual(model.dashboardURL, URL(string: "https://www.spoolr.io"), "no cloud_url ⇒ Open dashboard targets production")
+    }
+
     // MARK: - bootstrap (the launch decision the App entry point delegates to)
 
     func testBootstrapPairedConfigEntersConnectedHome() {

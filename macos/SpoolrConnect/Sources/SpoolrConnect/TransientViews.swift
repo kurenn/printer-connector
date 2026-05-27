@@ -235,7 +235,9 @@ struct JustPairedView: View {
 
             HairlineDivider()
             VStack(spacing: 0) {
-                ActionRow(symbol: "globe", title: "Open dashboard", shortcut: "⌘D", primary: true)
+                ActionRow(symbol: "globe", title: "Open dashboard", shortcut: "⌘D", primary: true) {
+                    model.openDashboard()
+                }
                 ActionRow(symbol: "plus", title: "Add more printers", shortcut: "⌘N") { model.showTokenEntry() }
             }
             .padding(.horizontal, 6).padding(.bottom, 8).padding(.top, 2)

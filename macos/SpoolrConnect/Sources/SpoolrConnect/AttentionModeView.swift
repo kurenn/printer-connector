@@ -55,7 +55,9 @@ struct AttentionModeView: View {
                 ActionRow(symbol: "plus", title: "Add printer…", shortcut: "⌘N", primary: true) {
                     model.beginScan()
                 }
-                ActionRow(symbol: "globe", title: "Open dashboard", shortcut: "⌘D")
+                ActionRow(symbol: "globe", title: "Open dashboard", shortcut: "⌘D") {
+                    model.openDashboard()
+                }
             }
             .padding(.horizontal, 6)
             .padding(.bottom, 8)
