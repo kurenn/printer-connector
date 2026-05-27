@@ -1,0 +1,1064 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Download Spoolr Connect — open-source agent for your printers</title>
+<meta name="description" content="Spoolr Connect is the lightweight, open-source (MIT) agent that bridges your Klipper, Moonraker and Bambu printers to spoolr.io. Outbound-only — no open ports.">
+<!-- Self-contained brand favicon (the rings mark) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='29' fill='none' stroke='%2322d67a' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%2322d67a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── Tokens (mirror the Spoolr design system) ────────── */
+:root{
+  --bg:#0a0b0d;
+  --surface:#101115;
+  --surface-2:#14161b;
+  --surface-3:#181a20;
+  --border:#22242c;
+  --border-2:#2c2f38;
+  --border-hover:#383b47;
+  --text-1:#e8e9ee;
+  --text-2:#95979f;
+  --text-3:#5e6069;
+  --accent:#22d67a;
+  --accent-dim:rgba(34,214,122,.16);
+  --accent-glow:rgba(34,214,122,.06);
+  --warning:#f5a524;
+  --warning-dim:rgba(245,165,36,.14);
+  --danger:#e5484d;
+  --danger-dim:rgba(229,72,77,.14);
+  --info:#5b9dff;
+  --info-dim:rgba(91,157,255,.14);
+  --font-sans:"Geist",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --font-mono:"Geist Mono","JetBrains Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text-1);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:"ss01","cv11"}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
+::selection{background:var(--accent-dim);color:var(--text-1)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;border:2px solid var(--bg)}
+
+.page{
+  background:
+    radial-gradient(900px 600px at 8% -10%,rgba(34,214,122,.045),transparent 60%),
+    radial-gradient(700px 500px at 95% 12%,rgba(91,157,255,.03),transparent 60%),
+    var(--bg);
+  min-height:100vh;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px;width:100%}
+.mono{font-family:var(--font-mono)}
+.eyebrow{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3)}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.dot-green{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.dot-amber{background:var(--warning)}
+.dot-red{background:var(--danger)}
+.dot-blue{background:var(--info)}
+
+/* Nav */
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:rgba(10,11,13,.72);border-bottom:1px solid var(--border)}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:58px}
+.brand{display:flex;align-items:center;gap:9px}
+.brand-mark{width:26px;height:26px;display:grid;place-items:center}
+.brand-name{font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.brand-dot{color:var(--accent)}
+.nav-links{display:flex;align-items:center;gap:28px}
+.nav-links a{font-size:13px;color:var(--text-2);transition:color .1s}
+.nav-links a:hover{color:var(--text-1)}
+.nav-links a.is-active{color:var(--text-1)}
+.nav-cta{display:flex;align-items:center;gap:10px}
+@media(max-width:780px){.nav-links{display:none}}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:7px;font-weight:500;font-size:13px;padding:8px 14px;border:1px solid transparent;transition:all .1s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#0a0b0d;font-weight:600}
+.btn-primary:hover{background:color-mix(in oklab,var(--accent) 90%,white 10%);box-shadow:0 0 0 4px var(--accent-glow)}
+.btn-outline{background:var(--surface);border-color:var(--border);color:var(--text-1)}
+.btn-outline:hover{background:var(--surface-2);border-color:var(--border-hover)}
+.btn-ghost{color:var(--text-2)}
+.btn-ghost:hover{color:var(--text-1)}
+.btn-lg{padding:11px 18px;font-size:14px}
+
+/* Hero */
+.dl-hero{padding:72px 0 24px;position:relative;overflow:hidden}
+.dl-hero::before{
+  content:"";position:absolute;left:50%;top:-180px;transform:translateX(-50%);
+  width:1100px;height:1100px;
+  background-image:radial-gradient(circle,transparent 49%,rgba(34,214,122,.08) 50%,transparent 51%);
+  background-size:160px 160px;
+  mask-image:radial-gradient(closest-side,black 30%,transparent 70%);
+  -webkit-mask-image:radial-gradient(closest-side,black 30%,transparent 70%);
+  pointer-events:none;
+}
+.dl-hero-inner{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+@media(max-width:980px){.dl-hero-inner{grid-template-columns:1fr;gap:32px}}
+
+.crumbs{display:flex;align-items:center;gap:10px;margin-bottom:24px;font-family:var(--font-mono);font-size:11px;color:var(--text-3);letter-spacing:.06em}
+.crumbs a{color:var(--text-3)}.crumbs a:hover{color:var(--text-1)}
+.crumbs .sep{color:var(--border-2)}
+.crumbs .cur{color:var(--text-1)}
+
+.dl-version{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:5px 10px 5px 6px;background:var(--surface);
+  border:1px solid var(--border);border-radius:999px;
+  font-family:var(--font-mono);font-size:11px;color:var(--text-2);
+  margin-bottom:24px;
+}
+.dl-version .tag{background:var(--accent-dim);color:var(--accent);padding:2px 7px;border-radius:5px;letter-spacing:.06em;font-weight:600}
+
+.dl-left h1{font-size:clamp(38px,5vw,58px);font-weight:600;letter-spacing:-.035em;line-height:1.04;margin-bottom:20px;text-wrap:balance}
+.dl-left h1 .hl{color:var(--accent)}
+.dl-left p.lead{font-size:16px;color:var(--text-2);line-height:1.55;max-width:54ch;margin-bottom:28px;text-wrap:pretty}
+
+/* Hero badges */
+.hero-badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--font-mono);font-size:11px;color:var(--text-2);
+  padding:5px 10px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--border);
+}
+.hero-badge svg{color:var(--accent)}
+
+/* Detected platform card */
+.detect{
+  display:flex;align-items:center;gap:14px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:14px 16px;margin-bottom:14px;
+}
+.detect-icon{width:36px;height:36px;border-radius:8px;background:var(--accent-dim);color:var(--accent);display:grid;place-items:center;flex-shrink:0}
+.detect-body{flex:1;min-width:0}
+.detect-lbl{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.14em;color:var(--text-3);text-transform:uppercase;margin-bottom:3px}
+.detect-name{font-size:13.5px;color:var(--text-1);font-weight:500}
+.detect-sub{font-family:var(--font-mono);font-size:11px;color:var(--text-3);margin-top:1px}
+.detect-actions{display:flex;align-items:center;gap:8px}
+@media(max-width:560px){.detect{flex-wrap:wrap}.detect-actions{width:100%}}
+
+.unsigned-hint{
+  display:flex;gap:10px;align-items:flex-start;
+  padding:11px 14px;
+  background:var(--warning-dim);border:1px solid rgba(245,165,36,.3);
+  border-radius:8px;
+  font-size:12.5px;color:var(--text-1);line-height:1.5;
+}
+.unsigned-hint svg{flex-shrink:0;margin-top:1px;color:var(--warning)}
+.unsigned-hint a{color:var(--warning);text-decoration:underline;text-underline-offset:2px}
+
+/* Terminal */
+.term{background:linear-gradient(180deg,#0c0d10,#08090b);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 30px 80px -40px rgba(0,0,0,.6)}
+.term-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.term-dots{display:flex;gap:6px}
+.term-dots span{width:10px;height:10px;border-radius:50%;background:var(--surface-3);border:1px solid var(--border-2)}
+.term-dots span:nth-child(1){background:#3d3f48}
+.term-title{font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);margin:0 auto 0 8px}
+.term-meta{font-family:var(--font-mono);font-size:10.5px;color:var(--text-3);display:flex;align-items:center;gap:8px}
+.term-body{padding:18px 20px 20px;font-family:var(--font-mono);font-size:13px;line-height:1.7}
+.term-line{display:flex;gap:10px}
+.term-prompt{color:var(--accent)}
+.term-cmd{color:var(--text-1);flex:1}
+.term-out{color:var(--text-2)}
+.term-comment{color:var(--text-3)}
+.term-ok{color:var(--accent)}
+.term-warn{color:var(--warning)}
+.term-info{color:var(--info)}
+.term-actions{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface)}
+.copy-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;font-family:var(--font-sans);font-size:11.5px;color:var(--text-2);border:1px solid var(--border);background:var(--surface-2);border-radius:6px}
+.copy-btn:hover{color:var(--text-1);border-color:var(--border-hover)}
+.copy-btn.is-copied{color:var(--accent);border-color:var(--accent)}
+
+/* Sections */
+.section{padding:72px 0;border-top:1px solid var(--border)}
+.section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:32px;margin-bottom:36px;flex-wrap:wrap}
+.section-tag{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.section-tag .num{font-family:var(--font-mono);font-size:10.5px;color:var(--accent);letter-spacing:.12em}
+.section-head h2{font-size:30px;font-weight:600;letter-spacing:-.025em;line-height:1.1;max-width:20ch;text-wrap:balance}
+.section-head p.lead{font-size:14.5px;color:var(--text-2);line-height:1.55;max-width:46ch;text-wrap:pretty}
+
+/* Pairing flow */
+.pair-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:880px){.pair-grid{grid-template-columns:1fr}}
+.pair-step{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:22px 22px 24px;position:relative;
+  display:flex;flex-direction:column;gap:12px;
+}
+.pair-step-num{
+  position:absolute;top:18px;right:18px;
+  font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;
+  color:var(--text-3);
+}
+.pair-icon{width:34px;height:34px;border-radius:9px;background:var(--accent-dim);color:var(--accent);display:grid;place-items:center}
+.pair-step h3{font-size:17px;font-weight:600;letter-spacing:-.015em;color:var(--text-1)}
+.pair-step p{font-size:13.5px;color:var(--text-2);line-height:1.55}
+.pair-step .pair-tag{
+  margin-top:auto;font-family:var(--font-mono);font-size:10.5px;color:var(--text-3);
+  letter-spacing:.06em;display:flex;gap:6px;align-items:center;
+}
+
+/* Pairing token mock */
+.pair-code{
+  font-family:var(--font-mono);font-size:15px;font-weight:600;letter-spacing:.04em;
+  color:var(--accent);background:#08090b;border:1px solid var(--border);
+  border-radius:7px;padding:10px 14px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* Platform cards */
+.plat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:960px){.plat-grid{grid-template-columns:1fr}}
+.plat{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:22px;display:flex;flex-direction:column;gap:16px;position:relative;
+  transition:border-color .12s,background .12s;
+}
+.plat:hover{border-color:var(--border-hover)}
+.plat.is-recommended{border-color:color-mix(in oklab,var(--accent) 50%,var(--border) 50%);box-shadow:0 0 0 4px var(--accent-glow)}
+.plat-recommend,.plat-beta{position:absolute;top:18px;right:18px;font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;padding:3px 8px;border-radius:4px;text-transform:uppercase;font-weight:600}
+.plat-recommend{background:var(--accent-dim);color:var(--accent)}
+.plat-beta{background:var(--warning-dim);color:var(--warning)}
+.plat-head{display:flex;align-items:center;gap:12px}
+.plat-icon{width:40px;height:40px;border-radius:9px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2);flex-shrink:0}
+.plat.is-recommended .plat-icon{background:var(--accent-dim);border-color:transparent;color:var(--accent)}
+.plat-name{font-size:16px;font-weight:600;letter-spacing:-.01em}
+.plat-arch{font-family:var(--font-mono);font-size:11px;color:var(--text-3);margin-top:2px}
+.plat-desc{font-size:13px;color:var(--text-2);line-height:1.55}
+
+.install-block{
+  background:#08090b;border:1px solid var(--border);border-radius:8px;
+  padding:11px 14px;font-family:var(--font-mono);font-size:12px;color:var(--text-1);
+  position:relative;overflow-x:auto;line-height:1.6;
+}
+.install-block .prompt{color:var(--accent);user-select:none;margin-right:6px}
+.install-block .comment{color:var(--text-3)}
+.install-block .copy{
+  position:absolute;top:6px;right:6px;
+  padding:3px 7px;font-family:var(--font-sans);font-size:10.5px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:5px;color:var(--text-2);
+}
+.install-block .copy:hover{color:var(--text-1);border-color:var(--border-hover)}
+.install-block .copy.is-copied{color:var(--accent);border-color:var(--accent)}
+
+.plat-or{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);font-size:10px;color:var(--text-3);
+  letter-spacing:.16em;text-transform:uppercase;margin:2px 0;
+}
+.plat-or::before,.plat-or::after{content:"";flex:1;height:1px;background:var(--border)}
+
+.plat-foot{
+  display:flex;justify-content:space-between;gap:10px;align-items:center;
+  font-family:var(--font-mono);font-size:10.5px;color:var(--text-3);
+  padding-top:12px;border-top:1px solid var(--border);
+}
+.plat-foot a{color:var(--accent)}
+.plat-foot a:hover{text-decoration:underline}
+
+.first-launch{
+  display:flex;gap:9px;align-items:flex-start;
+  font-size:12px;color:var(--text-2);line-height:1.5;
+  padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);
+  border-radius:7px;
+}
+.first-launch svg{flex-shrink:0;margin-top:1px;color:var(--warning)}
+.first-launch a{color:var(--text-1);text-decoration:underline;text-underline-offset:2px}
+
+/* Supported printers */
+.printers-grid{display:grid;grid-template-columns:repeat(2,1fr) 1fr;gap:14px}
+@media(max-width:960px){.printers-grid{grid-template-columns:1fr}}
+.printer-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:20px 22px;display:flex;flex-direction:column;gap:10px;position:relative;
+}
+.printer-card.future{opacity:.78}
+.printer-card .pc-status{
+  position:absolute;top:18px;right:18px;
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;
+  padding:3px 8px;border-radius:4px;text-transform:uppercase;font-weight:600;
+}
+.pc-status.live{background:var(--accent-dim);color:var(--accent)}
+.pc-status.beta{background:var(--warning-dim);color:var(--warning)}
+.pc-status.soon{background:var(--info-dim);color:var(--info)}
+.printer-card h3{font-size:17px;font-weight:600;letter-spacing:-.015em;line-height:1.2;padding-right:80px}
+.printer-card .pc-models{font-family:var(--font-mono);font-size:11.5px;color:var(--text-3);letter-spacing:.04em}
+.printer-card .pc-desc{font-size:13px;color:var(--text-2);line-height:1.55;margin-top:2px}
+.printer-card .pc-proto{
+  display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:10px;
+}
+.printer-card .pc-tag{
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;
+  padding:3px 8px;border-radius:4px;background:var(--surface-3);color:var(--text-2);
+  text-transform:uppercase;
+}
+
+/* Capabilities */
+.caps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:880px){.caps{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.caps{grid-template-columns:1fr}}
+.cap{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:18px 20px;display:flex;flex-direction:column;gap:8px;
+}
+.cap-head{display:flex;align-items:center;gap:10px}
+.cap-icon{width:32px;height:32px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);color:var(--accent);display:grid;place-items:center}
+.cap h3{font-size:14.5px;font-weight:600;letter-spacing:-.01em}
+.cap p{font-size:13px;color:var(--text-2);line-height:1.55}
+.cap-meta{
+  font-family:var(--font-mono);font-size:10.5px;color:var(--text-3);
+  letter-spacing:.06em;margin-top:auto;padding-top:8px;border-top:1px solid var(--border);
+}
+
+/* Security card */
+.sec-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:18px}
+@media(max-width:880px){.sec-grid{grid-template-columns:1fr}}
+.sec-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:16px}
+.sec-icon{width:42px;height:42px;border-radius:9px;background:var(--accent-dim);color:var(--accent);display:grid;place-items:center}
+.sec-card h3{font-size:18px;font-weight:600;letter-spacing:-.015em}
+.sec-card p{font-size:13.5px;color:var(--text-2);line-height:1.55}
+.sec-points{display:flex;flex-direction:column;gap:0}
+.sec-point{display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+.sec-point:last-child{border-bottom:none}
+.sec-point svg{flex-shrink:0;color:var(--accent);margin-top:2px}
+.sec-point .pt-t{font-size:13px;color:var(--text-1);font-weight:500}
+.sec-point .pt-s{font-size:12px;color:var(--text-3);margin-top:2px;line-height:1.45}
+
+/* System reqs */
+.reqs{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+@media(max-width:880px){.reqs{grid-template-columns:repeat(2,1fr)}}
+.req{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.req-icon{width:28px;height:28px;border-radius:7px;background:var(--surface-2);color:var(--accent);display:grid;place-items:center;margin-bottom:14px;border:1px solid var(--border)}
+.req-name{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;color:var(--text-3);text-transform:uppercase;margin-bottom:8px}
+.req-val{font-size:14px;color:var(--text-1);font-weight:500;margin-bottom:6px;line-height:1.3}
+.req-sub{font-size:12px;color:var(--text-2);line-height:1.5}
+
+/* Changelog */
+.relog{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:880px){.relog{grid-template-columns:1fr}}
+.relog-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.relog-card-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.relog-version{display:flex;align-items:baseline;gap:8px}
+.relog-version .v{font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-1)}
+.relog-version .latest{font-family:var(--font-mono);font-size:9.5px;color:var(--accent);background:var(--accent-dim);padding:1px 6px;border-radius:4px;letter-spacing:.08em;text-transform:uppercase}
+.relog-date{font-family:var(--font-mono);font-size:11px;color:var(--text-3)}
+.relog-body{padding:18px}
+.relog-section{margin-bottom:14px}
+.relog-section:last-child{margin-bottom:0}
+.relog-section h4{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;color:var(--text-3);text-transform:uppercase;margin-bottom:10px}
+.relog-list{display:flex;flex-direction:column;gap:7px}
+.relog-item{display:flex;gap:9px;font-size:13px;color:var(--text-2);line-height:1.45}
+.relog-item .bullet{flex-shrink:0;width:14px;height:14px;border-radius:4px;font-family:var(--font-mono);font-size:9px;display:grid;place-items:center;margin-top:2px;font-weight:600}
+.bullet-add{background:var(--accent-dim);color:var(--accent)}
+.bullet-fix{background:var(--info-dim);color:var(--info)}
+.bullet-chg{background:var(--warning-dim);color:var(--warning)}
+.bullet-sec{background:var(--danger-dim);color:var(--danger)}
+.relog-item b{color:var(--text-1);font-weight:500}
+
+/* Github CTA */
+.gh{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;display:flex;justify-content:space-between;gap:24px;align-items:center;flex-wrap:wrap}
+.gh-left{display:flex;gap:16px;align-items:center}
+.gh-icon{width:42px;height:42px;border-radius:9px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;color:var(--text-1)}
+.gh-title{font-size:18px;font-weight:600;letter-spacing:-.015em}
+.gh-sub{font-size:13px;color:var(--text-2);margin-top:4px;line-height:1.5}
+.gh-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.gh-stat{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;font-family:var(--font-mono);font-size:11.5px;color:var(--text-2)}
+
+.footer{padding:64px 0 36px;border-top:1px solid var(--border);margin-top:48px}
+.foot-row{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;font-family:var(--font-mono);font-size:11px;color:var(--text-3)}
+.foot-row .links{display:flex;gap:18px}
+.foot-row a:hover{color:var(--text-1)}
+.foot-status{display:flex;align-items:center;gap:7px}
+
+@keyframes blink{50%{opacity:0}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ═══════════════ NAV ═══════════════ -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="https://www.spoolr.io/">
+      <span class="brand-mark">
+        <svg width="26" height="26" viewBox="0 0 64 64" fill="none">
+          <circle cx="32" cy="32" r="29" stroke="#22d67a" stroke-width="3"></circle>
+          <circle cx="32" cy="32" r="22" stroke="#22d67a" stroke-width="1.5" opacity=".55"></circle>
+          <circle cx="32" cy="32" r="15" stroke="#22d67a" stroke-width="1.5" opacity=".4"></circle>
+          <circle cx="32" cy="32" r="7" fill="#22d67a"></circle>
+        </svg>
+      </span>
+      <span class="brand-name">spoolr<span class="brand-dot">.</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="https://www.spoolr.io/#features">Features</a>
+      <a class="is-active" href="#">Download</a>
+      <a href="https://www.spoolr.io/docs/api">Docs</a>
+      <a href="#changelog">Changelog</a>
+    </div>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="https://www.spoolr.io/sign_in">Sign in</a>
+      <a class="btn btn-primary" href="https://www.spoolr.io/">Get a pairing token</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════ HERO ═══════════════ -->
+<section class="dl-hero">
+  <div class="wrap dl-hero-inner">
+    <div class="dl-left">
+      <div class="crumbs">
+        <a href="https://www.spoolr.io/">spoolr</a>
+        <span class="sep">/</span>
+        <span class="cur">download</span>
+      </div>
+
+      <div class="dl-version">
+        <span class="tag">v0.4.0</span>
+        <span>Released May 26, 2026 ·</span>
+        <a href="#changelog" style="color:var(--accent)">release notes →</a>
+      </div>
+
+      <h1>Connect your printers<br>to <span class="hl">spoolr.io</span>.</h1>
+      <p class="lead">
+        Spoolr Connect is the lightweight, open-source agent that runs on your network and
+        bridges your 3D printers to the Spoolr cloud — so you can monitor and control them
+        from anywhere. Outbound-only: no open ports, no port-forwarding, no VPN.
+      </p>
+
+      <div class="hero-badges">
+        <span class="hero-badge">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          MIT licensed
+        </span>
+        <span class="hero-badge">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          Outbound-only
+        </span>
+        <span class="hero-badge">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          Klipper · Moonraker · Bambu (beta)
+        </span>
+      </div>
+
+      <div class="detect">
+        <div class="detect-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M2 20h20"/></svg>
+        </div>
+        <div class="detect-body">
+          <div class="detect-lbl">MACOS BUILD</div>
+          <div class="detect-name">macOS · universal (Apple Silicon + Intel)</div>
+          <div class="detect-sub">Spoolr Connect.app · menu-bar agent · ~11&nbsp;MB</div>
+        </div>
+        <div class="detect-actions">
+          <a class="btn btn-primary" href="https://github.com/kurenn/printer-connector/releases/latest">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            Download .zip
+          </a>
+          <a class="btn btn-outline" href="#platforms">All platforms</a>
+        </div>
+      </div>
+
+      <div class="unsigned-hint">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
+        <div>
+          <b style="color:var(--text-1);font-weight:600">First-launch security prompt is expected.</b>
+          Spoolr is open-source and ad-hoc signed (not notarized — Spoolr has no paid Apple account). Downloading the .zip in a browser quarantines it, so you'll click <span class="mono" style="color:var(--text-1)">Open Anyway</span> in <span class="mono" style="color:var(--text-1)">System Settings › Privacy &amp; Security</span>. The one-line Terminal install (right) avoids the quarantine entirely. <a href="#first-launch">Per-OS steps →</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="dl-right">
+      <div class="term">
+        <div class="term-head">
+          <div class="term-dots"><span></span><span></span><span></span></div>
+          <span class="term-title">install · macOS / Linux / Raspberry Pi</span>
+          <span class="term-meta"><span class="dot dot-green"></span>open source</span>
+        </div>
+        <div class="term-body">
+          <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl -fsSL <span style="color:var(--accent)">raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh</span> | bash</span></div>
+          <div class="term-line"><span class="term-out">▸ detected: darwin/arm64 (macOS 14.5)</span></div>
+          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.4.0…</span><span class="term-ok">[ok]</span></div>
+          <div class="term-line"><span class="term-out">▸ installing Spoolr Connect.app → /Applications</span><span class="term-ok">[ok]</span></div>
+          <div class="term-line"><span class="term-out">▸ launching menu-bar agent</span><span class="term-ok">[ok]</span></div>
+          <div class="term-line"><span class="term-comment"># scanning your LAN for printers…</span></div>
+          <div class="term-line"><span class="term-ok">✓</span><span class="term-out"> moonraker · voron-01.lan:7125</span></div>
+          <div class="term-line"><span class="term-ok">✓</span><span class="term-out"> bambu · 192.168.1.84 (X1C — LAN mode)</span></div>
+          <div class="term-line"><span class="term-comment"># paste your pairing token from spoolr.io to finish</span></div>
+          <div class="term-line"><span class="term-ok">✓</span><span class="term-out"> paired with workspace "Dotworks" · 2 printers online</span></div>
+          <div class="term-line"><span class="term-prompt">$</span><span style="display:inline-block;width:8px;height:14px;background:var(--accent);animation:blink 1.1s steps(2,start) infinite;vertical-align:-2px"></span></div>
+        </div>
+        <div class="term-actions">
+          <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--text-3)">≈ 10s on a Raspberry Pi 4</span>
+          <button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ PAIRING FLOW ═══════════════ -->
+<section class="section" id="pair">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag"><span class="num">[ 01 ]</span><span class="eyebrow">pairing flow</span></div>
+        <h2>Three steps from sign-in to live fleet.</h2>
+      </div>
+      <p class="lead">Pairing happens once per machine that runs Connect. The dashboard issues a single-use token; Connect trades it for a per-installation secret over an outbound TLS connection — your printer never accepts inbound traffic.</p>
+    </div>
+
+    <div class="pair-grid">
+      <div class="pair-step">
+        <div class="pair-step-num">01</div>
+        <div class="pair-icon">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v7h-7"/></svg>
+        </div>
+        <h3>Get a pairing token</h3>
+        <p>Sign in to <span class="mono" style="color:var(--text-1)">spoolr.io</span> and add a connector. You'll get a single-use token that expires in 10 minutes.</p>
+        <div class="pair-code">spr_4kZ9qT…r7Qz2Xv</div>
+        <div class="pair-tag">SINGLE-USE · EXPIRES IN 10:00</div>
+      </div>
+
+      <div class="pair-step">
+        <div class="pair-step-num">02</div>
+        <div class="pair-icon">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        </div>
+        <h3>Install Connect</h3>
+        <p>On a machine that sits on the same network as your printers — your laptop, a Raspberry Pi, the Klipper host, or the K1's onboard Linux. One binary, no dependencies.</p>
+        <div class="pair-tag">macOS · Linux · Pi · K1 · Windows</div>
+      </div>
+
+      <div class="pair-step">
+        <div class="pair-step-num">03</div>
+        <div class="pair-icon">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V8a5 5 0 0 1 10 0v3"/></svg>
+        </div>
+        <h3>Paste the token</h3>
+        <p>Drop the token into Connect's menu-bar app or the installer prompt (or run <span class="mono" style="color:var(--accent)">printer-connector register --token &lt;token&gt;</span>). Your printers light up in the dashboard within seconds.</p>
+        <div class="pair-tag">OUTBOUND TLS · HANDSHAKE</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ PLATFORMS ═══════════════ -->
+<section class="section" id="platforms">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag"><span class="num">[ 02 ]</span><span class="eyebrow">install per platform</span></div>
+        <h2>Pick your platform.</h2>
+      </div>
+      <p class="lead">Three supported hosts today. All builds come from the same Go source — verify by cloning <span class="mono" style="color:var(--text-1)">github.com/kurenn/printer-connector</span> and running <span class="mono" style="color:var(--accent)">go build ./cmd/connector</span> if you'd rather not trust our binaries.</p>
+    </div>
+
+    <div class="plat-grid">
+
+      <!-- macOS -->
+      <div class="plat is-recommended">
+        <span class="plat-recommend">RECOMMENDED</span>
+        <div class="plat-head">
+          <div class="plat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M2 20h20"/></svg>
+          </div>
+          <div>
+            <div class="plat-name">macOS</div>
+            <div class="plat-arch">menu-bar app · universal (Apple Silicon + Intel)</div>
+          </div>
+        </div>
+        <div class="plat-desc">A menu-bar agent that scans your LAN, lets you paste a pairing token, then runs quietly in the background. The status icon shows live printer state; <i>Open dashboard</i> jumps straight to the web app.</div>
+
+        <div class="plat-or">one-line install</div>
+        <div class="install-block">
+          <button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash">Copy</button>
+          <span class="prompt">$</span> curl -fsSL raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash
+        </div>
+
+        <div class="plat-or">or download</div>
+        <div style="display:flex;gap:8px">
+          <a class="btn btn-outline" style="flex:1;justify-content:center" href="https://github.com/kurenn/printer-connector/releases/latest">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            SpoolrConnect-macos.zip
+          </a>
+        </div>
+
+        <div class="first-launch" id="first-launch">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+          <div>Ad-hoc signed, not notarized. If you download the .zip in a browser, macOS shows <i>"cannot be opened"</i> — open <b>System Settings › Privacy &amp; Security</b> and click <b>Open Anyway</b>. The curl install above avoids this entirely.</div>
+        </div>
+
+        <div class="plat-foot">
+          <span>~11&nbsp;MB · macOS 12+</span>
+          <a href="https://github.com/kurenn/printer-connector/releases/latest">Checksums ›</a>
+        </div>
+      </div>
+
+      <!-- Linux / Pi / K1 -->
+      <div class="plat">
+        <div class="plat-head">
+          <div class="plat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="1"/><rect x="6" y="7" width="6" height="5"/><circle cx="16" cy="8" r="1" fill="currentColor"/><circle cx="18" cy="8" r="1" fill="currentColor"/><circle cx="16" cy="11" r="1" fill="currentColor"/><circle cx="18" cy="11" r="1" fill="currentColor"/></svg>
+          </div>
+          <div>
+            <div class="plat-name">Linux · Raspberry Pi · Creality K1</div>
+            <div class="plat-arch">arm64 · armv7 · x86_64</div>
+          </div>
+        </div>
+        <div class="plat-desc">One-line installer that picks the right binary, installs it, and runs it as a background service (systemd on Linux / Pi, the K1's init system on Creality firmware).</div>
+
+        <div class="plat-or">Linux / Raspberry Pi</div>
+        <div class="install-block">
+          <button class="copy" data-copy="wget -qO- https://raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh | sudo bash">Copy</button>
+          <span class="prompt">$</span> wget -qO- raw.githubusercontent.com/kurenn/printer-connector/main/install-klipper.sh | sudo bash
+        </div>
+
+        <div class="plat-or">Creality K1 / K1 Max</div>
+        <div class="install-block">
+          <button class="copy" data-copy="wget -qO- https://raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh | sh">Copy</button>
+          <span class="prompt">$</span> wget -qO- raw.githubusercontent.com/kurenn/printer-connector/main/install-k1.sh | sh
+          <br><span class="comment"># ssh as root@&lt;printer-ip&gt; first</span>
+        </div>
+
+        <div class="plat-foot">
+          <span>Klipper / Moonraker required</span>
+          <a href="https://github.com/kurenn/printer-connector#readme">Manual install ›</a>
+        </div>
+      </div>
+
+      <!-- Windows -->
+      <div class="plat">
+        <span class="plat-beta">NEW · BETA</span>
+        <div class="plat-head">
+          <div class="plat-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5l8-1v8H3zM12 4l9-1v9h-9zM3 13h8v8l-8-1zM12 13h9v8l-9-1z"/></svg>
+          </div>
+          <div>
+            <div class="plat-name">Windows</div>
+            <div class="plat-arch">x64 · GUI installer + Windows Service</div>
+          </div>
+        </div>
+        <div class="plat-desc">A small GUI installer sets up Connect as a background Windows Service, scans for printers, and prompts for your pairing token. Newly shipped and still being validated across the printer matrix — tell us what works.</div>
+
+        <div class="plat-or">download</div>
+        <div style="display:flex;gap:8px">
+          <a class="btn btn-outline" style="flex:1;justify-content:center" href="https://github.com/kurenn/printer-connector/releases/latest">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            SpoolrConnect-Setup.exe
+          </a>
+        </div>
+
+        <div class="first-launch">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+          <div>Not signed with a paid Authenticode cert. SmartScreen will warn on first run — click <b>More info → Run anyway</b>. Code-signing is on the roadmap.</div>
+        </div>
+
+        <div class="plat-foot">
+          <span>Windows 10 / 11 · x64</span>
+          <a href="https://github.com/kurenn/printer-connector/releases/latest">Checksums ›</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SUPPORTED PRINTERS ═══════════════ -->
+<section class="section" id="printers">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag"><span class="num">[ 03 ]</span><span class="eyebrow">supported printers</span></div>
+        <h2>What Connect talks to.</h2>
+      </div>
+      <p class="lead">Connect speaks each printer's native protocol — Moonraker's HTTP API, Bambu's MQTT + FTPS in LAN mode — so you don't run a separate plugin or expose anything to the internet. Auto-discovery sweeps your LAN on first launch.</p>
+    </div>
+
+    <div class="printers-grid">
+      <div class="printer-card">
+        <span class="pc-status live">FULLY SUPPORTED</span>
+        <h3>Klipper · Moonraker</h3>
+        <div class="pc-models">Raspberry Pi · BTT Pad · mini PC · Creality K1 / K1 Max</div>
+        <div class="pc-desc">The primary path. Real-time telemetry, remote control, MJPEG webcam, and file management all work out of the box.</div>
+        <div class="pc-proto">
+          <span class="pc-tag">Moonraker HTTP</span>
+          <span class="pc-tag">WebSocket</span>
+          <span class="pc-tag">Auto-discover</span>
+        </div>
+      </div>
+
+      <div class="printer-card">
+        <span class="pc-status beta">BETA</span>
+        <h3>Bambu Lab — LAN mode</h3>
+        <div class="pc-models">X1 / X1 Carbon · P1S / P1P · A1 / A1 mini</div>
+        <div class="pc-desc">Supported, but not yet validated on every real Bambu in the wild. If you run one, please pair it and tell us what breaks — we triage Bambu reports first.</div>
+        <div class="pc-proto">
+          <span class="pc-tag">MQTT</span>
+          <span class="pc-tag">FTPS</span>
+          <span class="pc-tag">LAN-only</span>
+        </div>
+      </div>
+
+      <div class="printer-card future">
+        <span class="pc-status soon">COMING SOON</span>
+        <h3>PrusaLink · Elegoo SDCP</h3>
+        <div class="pc-models">Prusa MK4 / XL · Elegoo Centauri · Anycubic Kobra (SDCP)</div>
+        <div class="pc-desc">On the roadmap, not yet available. Watch the changelog to know when these go live.</div>
+        <div class="pc-proto">
+          <span class="pc-tag">Roadmap</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ CAPABILITIES ═══════════════ -->
+<section class="section" id="capabilities">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag"><span class="num">[ 04 ]</span><span class="eyebrow">what it does</span></div>
+        <h2>Everything you'd want to do remotely.</h2>
+      </div>
+      <p class="lead">Connect mirrors the controls your printer already offers — nothing more. If a printer doesn't expose pause-mid-print, neither will the dashboard. Capabilities listed below are live today.</p>
+    </div>
+
+    <div class="caps">
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V8M10 20V4M16 20v-8M22 20H2"/></svg></div>
+          <h3>Real-time monitoring</h3>
+        </div>
+        <p>Printer state, job progress, layer count, and hotend / bed / chamber temperatures stream to the dashboard.</p>
+        <div class="cap-meta">TELEMETRY ~30s · HEARTBEAT ~10s</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4l14 8-14 8z"/></svg></div>
+          <h3>Remote print control</h3>
+        </div>
+        <p>Pause, resume, cancel, home, and start prints. Only the controls a given printer actually exposes are shown.</p>
+        <div class="cap-meta">CAPABILITY-NEGOTIATED</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <h3>Live webcam</h3>
+        </div>
+        <p>Smooth MJPEG stream when you open a printer, plus on-demand snapshots for notifications and timelapses.</p>
+        <div class="cap-meta">MJPEG · JPEG SNAPSHOT</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+          <h3>Live G-code view</h3>
+        </div>
+        <p>The running print's G-code streamed to the dashboard's in-browser viewer, with the current layer highlighted.</p>
+        <div class="cap-meta">WEBGL · IN-BROWSER</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/></svg></div>
+          <h3>File management</h3>
+        </div>
+        <p>List, upload, delete, and start G-code files. Drag-and-drop from the dashboard or push via the API.</p>
+        <div class="cap-meta">LIST · UPLOAD · DELETE · START</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></div>
+          <h3>Auto-discovery</h3>
+        </div>
+        <p>On first launch Connect sweeps your subnet for Moonraker and Bambu printers and presents the list — one click to adopt.</p>
+        <div class="cap-meta">LAN SWEEP · SSDP</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <h3>Config backups</h3>
+        </div>
+        <p>Snapshot a printer's config and database from the dashboard or on a schedule — restorable to the same printer when something goes sideways.</p>
+        <div class="cap-meta">ON-DEMAND · SCHEDULED</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <h3>Job history</h3>
+        </div>
+        <p>Every print's outcome, duration, and filament usage feeds the fleet analytics view — success rate, utilization, throughput.</p>
+        <div class="cap-meta">FUELS FLEET ANALYTICS</div>
+      </div>
+
+      <div class="cap">
+        <div class="cap-head">
+          <div class="cap-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/></svg></div>
+          <h3>Simple updates</h3>
+        </div>
+        <p>Re-run the one-line installer (or <span class="mono" style="color:var(--text-1)">update.sh</span>) to move to the latest release. No auto-update daemon — you decide when it changes.</p>
+        <div class="cap-meta">MANUAL · update.sh</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SECURITY ═══════════════ -->
+<section class="section" id="security">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag"><span class="num">[ 05 ]</span><span class="eyebrow">security model</span></div>
+        <h2>Safe to run at home.</h2>
+      </div>
+      <p class="lead">Connect was designed for makers and small farms who don't want to think about networking. The model is deliberately one-directional: your printer never accepts a connection from the internet, and Spoolr's cloud only ever talks back over a channel <i>you</i> opened.</p>
+    </div>
+
+    <div class="sec-grid">
+      <div class="sec-card">
+        <div class="sec-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+        </div>
+        <h3>What we don't do</h3>
+        <p>No open ports on your network. No port-forwarding. No VPN. No inbound access of any kind. Connect only ever initiates connections; if your router blocks inbound, you're fine.</p>
+        <div class="sec-points">
+          <div class="sec-point">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            <div>
+              <div class="pt-t">Outbound TLS, port 443</div>
+              <div class="pt-s">Same channel a browser uses. Nothing else to configure.</div>
+            </div>
+          </div>
+          <div class="sec-point">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            <div>
+              <div class="pt-t">Single-use pairing tokens</div>
+              <div class="pt-s">A leaked token expires in 10 minutes or after one successful pair, whichever comes first.</div>
+            </div>
+          </div>
+          <div class="sec-point">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            <div>
+              <div class="pt-t">Per-installation secret</div>
+              <div class="pt-s">Stored on disk on the machine running Connect. Remove the connector from the dashboard to revoke it.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec-card">
+        <div class="sec-icon" style="background:var(--info-dim);color:var(--info)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01M15 9h.01"/></svg>
+        </div>
+        <h3>Open by default</h3>
+        <p>MIT licensed. Read every line of the agent that's sitting on your network. Build it yourself if you don't want to trust our binaries — the same <span class="mono" style="color:var(--text-1)">go build</span> our CI runs.</p>
+        <div class="sec-points">
+          <div class="sec-point">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            <div>
+              <div class="pt-t">Source on GitHub</div>
+              <div class="pt-s"><span class="mono" style="color:var(--text-1)">github.com/kurenn/printer-connector</span> — issues, PRs, releases.</div>
+            </div>
+          </div>
+          <div class="sec-point">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            <div>
+              <div class="pt-t">Build from source</div>
+              <div class="pt-s">Go 1.22+ and <span class="mono">go build ./cmd/connector</span>. The CI workflow (<span class="mono">.github/workflows/ci.yml</span>) is the same gofmt → vet → build → test we ship from.</div>
+            </div>
+          </div>
+          <div class="sec-point">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            <div>
+              <div class="pt-t">Runs entirely on your hardware</div>
+              <div class="pt-s">No cloud component on the printer side. Remove Connect any time and the printer keeps printing.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ SYSTEM REQS ═══════════════ -->
+<section class="section" id="reqs">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag"><span class="num">[ 06 ]</span><span class="eyebrow">system requirements</span></div>
+        <h2>Tiny by design.</h2>
+      </div>
+      <p class="lead">Connect is a single Go binary. No interpreter, no runtime, no surprise dependencies. It happily shares a Pi with Klipper, Moonraker, and a webcam.</p>
+    </div>
+
+    <div class="reqs">
+      <div class="req">
+        <div class="req-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg></div>
+        <div class="req-name">CPU</div>
+        <div class="req-val">Anything · 1 core</div>
+        <div class="req-sub">x86_64, ARM64 or ARMv7. A single core is enough alongside Klipper.</div>
+      </div>
+      <div class="req">
+        <div class="req-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="1"/><path d="M6 10v4M10 10v4M14 10v4M18 10v4"/></svg></div>
+        <div class="req-name">Memory</div>
+        <div class="req-val">~64 MB resident</div>
+        <div class="req-sub">A bit more when relaying a webcam stream to the cloud.</div>
+      </div>
+      <div class="req">
+        <div class="req-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4M2 12h4M12 2v4M12 18v4M5 5l3 3M16 16l3 3M5 19l3-3M16 8l3-3"/></svg></div>
+        <div class="req-name">Network</div>
+        <div class="req-val">Outbound 443 only</div>
+        <div class="req-sub">TLS to <span class="mono">www.spoolr.io</span>. No inbound rules required.</div>
+      </div>
+      <div class="req">
+        <div class="req-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg></div>
+        <div class="req-name">Disk</div>
+        <div class="req-val">~50 MB</div>
+        <div class="req-sub">Binary, config, and rotated logs. G-code cache is configurable.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ CHANGELOG ═══════════════ -->
+<section class="section" id="changelog">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag"><span class="num">[ 07 ]</span><span class="eyebrow">release notes</span></div>
+        <h2>What's new.</h2>
+      </div>
+      <p class="lead">Tagging a <span class="mono" style="color:var(--text-1)">vX.Y.Z</span> release publishes the cross-compiled binaries and the macOS app. The full history lives in <span class="mono" style="color:var(--text-1)">CHANGELOG.md</span>.</p>
+    </div>
+
+    <div class="relog">
+      <div class="relog-card">
+        <div class="relog-card-head">
+          <div class="relog-version"><span class="v">v0.4.0</span><span class="latest">latest</span></div>
+          <div class="relog-date">May 26, 2026</div>
+        </div>
+        <div class="relog-body">
+          <div class="relog-section">
+            <h4>Added</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>macOS app distribution ($0, no Apple account).</b> Universal, ad-hoc-signed Spoolr Connect.app + a one-line <span class="mono">install-macos.sh</span> and a published <span class="mono">SpoolrConnect-macos.zip</span>.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div>Project guide and substantially expanded Go + Swift test coverage.</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Fixed</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div>Menu-bar app now persists its pairing across restarts — no more re-pairing.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div>Network-scan "Pair" runs the real pairing flow instead of a mock; a rescan hides already-linked printers.</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Security</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-sec">!</span><div>Stopped committing a dev config that held a secret; gitignored real configs and scrubbed LAN IPs from examples.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="relog-card">
+        <div class="relog-card-head">
+          <div class="relog-version"><span class="v">v0.1.0 – v0.3.0</span></div>
+          <div class="relog-date">Dec 2025 – May 2026</div>
+        </div>
+        <div class="relog-body">
+          <div class="relog-section">
+            <h4>Earlier</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>v0.1.0</b> — Creality K1 / K1 Max support.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>v0.2.0 – v0.3.0</b> — LAN auto-discovery, Bambu Lab (beta) over MQTT + FTPS, and the install-from-releases flow.</div></div>
+              <div class="relog-item"><span class="bullet bullet-chg">~</span><div>Heartbeat cadence tightened to ~10s so "offline" shows within seconds; macOS app shipped universal.</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Full history</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div>See <a href="https://github.com/kurenn/printer-connector/blob/main/CHANGELOG.md" style="color:var(--accent)">CHANGELOG.md</a> and <a href="https://github.com/kurenn/printer-connector/releases" style="color:var(--accent)">GitHub Releases</a>.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ GITHUB ═══════════════ -->
+<section class="section" style="border-bottom:1px solid var(--border)">
+  <div class="wrap">
+    <div class="gh">
+      <div class="gh-left">
+        <div class="gh-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55v-2.1c-3.2.7-3.88-1.36-3.88-1.36-.52-1.32-1.28-1.67-1.28-1.67-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.27-5.23-5.67 0-1.25.45-2.27 1.18-3.07-.12-.29-.51-1.45.11-3.02 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.78 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.57.23 2.73.11 3.02.74.8 1.18 1.82 1.18 3.07 0 4.4-2.69 5.38-5.25 5.66.42.36.78 1.05.78 2.12v3.14c0 .31.21.66.79.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+        </div>
+        <div>
+          <div class="gh-title">Open source · MIT</div>
+          <div class="gh-sub">Read the code, file issues, send PRs. Bambu validation reports and Windows install logs are especially appreciated right now.</div>
+        </div>
+      </div>
+      <div class="gh-actions">
+        <span class="gh-stat">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+          MIT
+        </span>
+        <span class="gh-stat">Go 1.22</span>
+        <a class="btn btn-outline btn-lg" href="https://github.com/kurenn/printer-connector">Read the source</a>
+        <a class="btn btn-primary btn-lg" href="https://www.spoolr.io/">
+          Get a pairing token
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
+<footer class="footer">
+  <div class="wrap foot-row">
+    <span>© 2026 Spoolr · Connect v0.4.0 · MIT</span>
+    <span class="foot-status"><span class="dot dot-green"></span><a href="https://github.com/kurenn/printer-connector">github.com/kurenn/printer-connector</a></span>
+    <div class="links">
+      <a href="https://www.spoolr.io/">Home</a>
+      <a href="https://www.spoolr.io/docs/api">Docs</a>
+      <a href="#security">Security</a>
+      <a href="https://github.com/kurenn/printer-connector">Source</a>
+    </div>
+  </div>
+</footer>
+
+</div>
+
+<script>
+// Copy buttons — prefer the exact command in data-copy; fall back to block text.
+document.querySelectorAll('.copy, .copy-btn').forEach(function (btn) {
+  btn.addEventListener('click', async function () {
+    var text = btn.dataset.copy;
+    if (!text) {
+      var block = btn.closest('.install-block') || btn.closest('.term');
+      text = block ? block.innerText.replace(/^Copy\s*/m, '').trim() : '';
+    }
+    try { await navigator.clipboard.writeText(text); } catch (e) {}
+    var original = btn.innerHTML;
+    btn.classList.add('is-copied');
+    btn.textContent = 'Copied';
+    setTimeout(function () { btn.innerHTML = original; btn.classList.remove('is-copied'); }, 1600);
+  });
+});
+</script>
+
+</body>
+</html>
