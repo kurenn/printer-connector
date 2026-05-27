@@ -12,9 +12,9 @@ func (a *Agent) sendHeartbeat(ctx context.Context) error {
 	hb.Status.UptimeSeconds = int64(time.Since(a.startedAt).Seconds())
 	hb.Status.Version = a.version
 
-	for _, p := range a.cfg.Printers {
+	for _, p := range a.managedPrinters() {
 		reachable := false
-		mc := a.drivers[p.PrinterID]
+		mc := a.driverFor(p.PrinterID)
 		if mc != nil {
 			_, err := mc.QueryObjects(ctx)
 			reachable = (err == nil)

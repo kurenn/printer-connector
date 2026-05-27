@@ -47,6 +47,26 @@ type RegisteredPrinter struct {
 	Name string `json:"name"`
 }
 
+// RegisterPrintersRequest is the body for POST /api/v1/connectors/:id/printers,
+// used by a paired connector to adopt printers it discovered after pairing.
+type RegisterPrintersRequest struct {
+	Printers []PrinterInfo `json:"printers"`
+}
+
+// RegisterPrintersResponse echoes the adopted printers (host+port included so
+// the connector can match them back to what it discovered, regardless of order
+// or any cross-user entries the cloud skipped).
+type RegisterPrintersResponse struct {
+	Printers []AdoptedPrinter `json:"printers"`
+}
+
+type AdoptedPrinter struct {
+	ID            int    `json:"id"`
+	Name          string `json:"name"`
+	Host          string `json:"host"`
+	MoonrakerPort int    `json:"moonraker_port"`
+}
+
 type HeartbeatRequest struct {
 	Status struct {
 		UptimeSeconds int64  `json:"uptime_seconds"`

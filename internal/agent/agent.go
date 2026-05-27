@@ -3,18 +3,21 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
 	"os"
 	"runtime"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"printer-connector/internal/bambu"
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/config"
+	"printer-connector/internal/discovery"
 	"printer-connector/internal/driver"
 	"printer-connector/internal/moonraker"
 	"printer-connector/internal/util"
@@ -35,7 +38,12 @@ type Agent struct {
 	version string
 	once    bool
 
-	cloud   *cloud.Client
+	cloud *cloud.Client
+
+	// mu guards drivers + cfg.Printers, which periodic re-discovery mutates at
+	// runtime while the snapshot/command/heartbeat loops read them concurrently.
+	// Access through driverFor()/managedPrinters(); mutate under mu.Lock.
+	mu      sync.RWMutex
 	drivers map[int]driver.Driver
 
 	startedAt time.Time
@@ -91,6 +99,132 @@ func buildDrivers(printers []config.Printer) map[int]driver.Driver {
 	return drivers
 }
 
+// driverFor returns the driver for a printer id (nil if unknown), guarded so it
+// is safe to call from the loops while re-discovery swaps the map.
+func (a *Agent) driverFor(id int) driver.Driver {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.drivers[id]
+}
+
+// managedPrinters returns a copy of the configured printers, safe to range over
+// while re-discovery appends to the underlying slice.
+func (a *Agent) managedPrinters() []config.Printer {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return append([]config.Printer(nil), a.cfg.Printers...)
+}
+
+// DefaultRediscoverSeconds is how often a running connector re-scans the LAN to
+// adopt printers that came online after pairing. Override via config
+// `rediscover_seconds`; a negative value disables re-discovery.
+const DefaultRediscoverSeconds = 300
+
+// rediscoverLoop periodically re-scans the LAN and adopts any newly-online
+// printers, so printers powered on after pairing get managed without a manual
+// re-register. The managed-printer set used to be frozen at pairing.
+func (a *Agent) rediscoverLoop(ctx context.Context) error {
+	secs := a.cfg.RediscoverSeconds
+	if secs == 0 {
+		secs = DefaultRediscoverSeconds
+	}
+	if secs < 0 {
+		a.log.Info("printer re-discovery disabled")
+		return nil
+	}
+
+	tick := time.NewTicker(time.Duration(secs) * time.Second)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+			if err := a.rediscoverAndAdopt(ctx); err != nil {
+				a.log.Warn("printer re-discovery failed", "error", err)
+			}
+		}
+	}
+}
+
+func (a *Agent) rediscoverAndAdopt(ctx context.Context) error {
+	scanCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return a.adoptDiscovered(ctx, discovery.Scan(scanCtx).Printers)
+}
+
+// adoptDiscovered adopts any discovered printers not already managed. Split from
+// the LAN scan so it can be tested with synthetic discovery results.
+func (a *Agent) adoptDiscovered(ctx context.Context, found []discovery.Printer) error {
+	// Set of host:port we already manage (Moonraker host/port comes from BaseURL).
+	known := make(map[string]bool)
+	for _, p := range a.managedPrinters() {
+		if key := moonrakerHostPort(p); key != "" {
+			known[key] = true
+		}
+	}
+
+	var newInfos []cloud.PrinterInfo
+	for _, f := range found {
+		key := net.JoinHostPort(f.Host, strconv.Itoa(f.Port))
+		if known[key] {
+			continue
+		}
+		known[key] = true // de-dupe within a single scan
+		newInfos = append(newInfos, cloud.PrinterInfo{
+			Name:          f.Name,
+			Type:          config.TypeMoonraker,
+			Host:          f.Host,
+			MoonrakerPort: f.Port,
+			UIPort:        80,
+		})
+	}
+	if len(newInfos) == 0 {
+		return nil
+	}
+
+	adopted, err := a.cloud.RegisterPrinters(ctx, a.cfg.ConnectorID, newInfos)
+	if err != nil {
+		return err
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, ap := range adopted {
+		a.cfg.Printers = append(a.cfg.Printers, config.Printer{
+			PrinterID: ap.ID,
+			Type:      config.TypeMoonraker,
+			Name:      ap.Name,
+			BaseURL:   fmt.Sprintf("http://%s:%d", ap.Host, ap.MoonrakerPort),
+			UIPort:    80,
+		})
+		a.log.Info("adopted newly-discovered printer", "printer_id", ap.ID, "name", ap.Name, "host", ap.Host)
+	}
+	a.drivers = buildDrivers(a.cfg.Printers)
+	if err := config.SaveAtomic(a.cfgPath, a.cfg); err != nil {
+		a.log.Warn("failed to persist config after adopting printers", "error", err)
+	}
+	return nil
+}
+
+// moonrakerHostPort returns "host:port" for a Moonraker printer (parsed from its
+// BaseURL), or "" for non-Moonraker / unparseable entries.
+func moonrakerHostPort(p config.Printer) string {
+	if p.Type != "" && p.Type != config.TypeMoonraker {
+		return ""
+	}
+	u, err := url.Parse(p.BaseURL)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		port = strconv.Itoa(discovery.MoonrakerPort)
+	}
+	return net.JoinHostPort(u.Hostname(), port)
+}
+
 func (a *Agent) Run(ctx context.Context) error {
 	if a.cfg.PairingToken != "" {
 		if err := a.pair(ctx); err != nil {
@@ -121,13 +255,14 @@ func (a *Agent) Run(ctx context.Context) error {
 	// Each loop is supervised: a panic or unexpected return is recovered, logged
 	// loudly, and the loop restarted, so one faulting loop can neither vanish
 	// silently nor crash the sibling loops (heartbeat, commands, webcam).
-	errCh := make(chan error, 6)
+	errCh := make(chan error, 7)
 	go func() { errCh <- a.superviseLoop(ctx, "heartbeat", a.heartbeatLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "commands", a.commandsLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "snapshots", a.snapshotsLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "webcam", a.webcamLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "webcam_stream", a.webcamStreamLoop) }()
 	go func() { errCh <- a.superviseLoop(ctx, "watchdog", a.watchdogLoop) }()
+	go func() { errCh <- a.superviseLoop(ctx, "rediscover", a.rediscoverLoop) }()
 
 	select {
 	case <-ctx.Done():
@@ -435,8 +570,8 @@ func (a *Agent) processWebcamRequests(ctx context.Context) error {
 
 func (a *Agent) handleWebcamRequest(ctx context.Context, req cloud.WebcamRequest) error {
 	// Find the moonraker client for this printer
-	moon, ok := a.drivers[req.PrinterID]
-	if !ok {
+	moon := a.driverFor(req.PrinterID)
+	if moon == nil {
 		return a.cloud.UploadWebcamSnapshot(ctx, req.ID, req.PrinterID, nil, "application/json")
 	}
 
