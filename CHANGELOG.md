@@ -7,7 +7,18 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-28
+
 ### Added
+- **Live per-printer status in the menu bar:** the agent writes a local status
+  file that the menu-bar app reads, so the popover shows real printer status
+  instead of sample data (wires the previously-unwired live-telemetry seam).
+- **Periodic LAN re-discovery:** after pairing, the agent keeps sweeping the
+  network and auto-adopts newly-found printers.
+- **Streamed slicer uploads:** the agent streams g-code from a signed cloud URL
+  straight to the printer, with optional autostart.
+- **Windows support:** Inno Setup installer plus Windows Service registration.
+- GitHub Pages download page for the macOS app.
 - `LICENSE` (MIT) — the README advertised MIT but no license file existed.
 - `CHANGELOG.md`.
 - CI now builds and tests the macOS menu-bar app (`swift build && swift test`),
@@ -19,6 +30,12 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
   bundled menu-bar helper no longer mis-reports `0.1.0`).
 - Bumped GitHub Actions off the deprecated Node 20 runtime
   (`actions/checkout@v5`, `actions/setup-go@v6`).
+- Menu-bar polish: brighter dim text tiers for legible labels, a solid dark
+  panel matching the design, a real app icon, and removal of the dead
+  "Add by IP" row.
+
+### Fixed
+- The menu-bar "Open dashboard" link was a no-op; it now opens the dashboard.
 
 ## [0.4.0] - 2026-05-26
 
