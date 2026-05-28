@@ -30,9 +30,9 @@ enum Theme {
 
     // Text
     static let text1 = Color(hex: "#e8e9ee") // primary
-    static let text2 = Color(hex: "#95979f") // secondary
-    static let text3 = Color(hex: "#5e6069") // tertiary / mono labels
-    static let text4 = Color(hex: "#44464d") // offline / disabled
+    static let text2 = Color(hex: "#a6a8b0") // secondary
+    static let text3 = Color(hex: "#828590") // tertiary / mono labels (e.g. the hero-stat labels)
+    static let text4 = Color(hex: "#62646d") // offline / disabled
 
     // Brand / status
     static let accent  = Color(hex: "#22d67a")
