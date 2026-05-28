@@ -9,8 +9,18 @@ struct RootView: View {
         content
             .frame(width: Theme.popoverWidth)
             .background(
+                // Opaque, top-lit dark panel to match the design. The 0.55-alpha
+                // tint used before let the desktop bleed through the blur, washing
+                // the whole popover out. We keep VisualEffectView underneath only
+                // for its rounded-corner mask + window shadow, and paint a solid
+                // gradient over it (lighter at the top, near-black at the bottom).
                 VisualEffectView()
-                    .overlay(Color(.sRGB, red: 0.086, green: 0.090, blue: 0.110, opacity: 0.55))
+                    .overlay(
+                        LinearGradient(
+                            colors: [Color(hex: "#15171c"), Color(hex: "#0c0d11")],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
             )
             .overlay(
                 // top edge highlight (CSS .mb::before)
