@@ -105,7 +105,6 @@ struct ScanningView: View {
 
             HairlineDivider()
             VStack(spacing: 0) {
-                ActionRow(symbol: "network", title: "Add by IP address…", shortcut: "⌘I")
                 ActionRow(symbol: "arrow.clockwise", title: "Rescan network", shortcut: "⌘R") { model.beginScan() }
             }
             .padding(.horizontal, 6).padding(.bottom, 8).padding(.top, 2)
