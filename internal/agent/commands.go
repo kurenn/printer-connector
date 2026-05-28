@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"printer-connector/internal/backup"
@@ -151,6 +153,13 @@ func (a *Agent) executeUploadFile(ctx context.Context, mc driver.Driver, cmd clo
 		return fmt.Errorf("missing params.filename for upload_file")
 	}
 
+	// Slicer-upload path: the cloud parked the bytes and gave us a signed URL to
+	// stream them from (instead of inlining base64). This is how OrcaSlicer prints
+	// remotely; it can also auto-start the print via the `print` flag.
+	if downloadURL, _ := cmd.Params["download_url"].(string); downloadURL != "" {
+		return a.executeUploadFileFromURL(ctx, mc, cmd, result, filename, downloadURL)
+	}
+
 	contentBase64, _ := cmd.Params["content"].(string)
 	if contentBase64 == "" {
 		return fmt.Errorf("missing params.content for upload_file")
@@ -171,6 +180,67 @@ func (a *Agent) executeUploadFile(ctx context.Context, mc driver.Driver, cmd clo
 	}
 
 	a.log.Info("file uploaded", "command_id", cmd.ID, "filename", filename, "size", len(content))
+	return nil
+}
+
+// executeUploadFileFromURL streams a slicer-pushed file from a signed cloud URL
+// straight to Moonraker, optionally auto-starting the print. The OctoPrint
+// facade that produces these commands is Klipper/Moonraker-specific, so this is
+// gated to Moonraker printers (Bambu/SDCP have their own native slicer flows).
+func (a *Agent) executeUploadFileFromURL(ctx context.Context, mc driver.Driver, cmd cloud.Command, result map[string]any, filename, downloadURL string) error {
+	if err := a.validateCloudDownloadURL(downloadURL); err != nil {
+		return err
+	}
+
+	mkr, ok := mc.(*moonraker.Client)
+	if !ok {
+		return fmt.Errorf("slicer upload is only supported for Moonraker printers")
+	}
+
+	printFlag, _ := cmd.Params["print"].(bool)
+
+	tmpPath, size, err := a.cloud.DownloadToTemp(ctx, downloadURL)
+	if err != nil {
+		return fmt.Errorf("failed to download slicer upload: %w", err)
+	}
+	defer os.Remove(tmpPath)
+
+	f, err := os.Open(tmpPath)
+	if err != nil {
+		return fmt.Errorf("failed to open downloaded upload: %w", err)
+	}
+	defer f.Close()
+
+	if err := mkr.UploadFileReader(ctx, filename, f, printFlag); err != nil {
+		return fmt.Errorf("failed to upload file to moonraker: %w", err)
+	}
+
+	result["filename"] = filename
+	result["size_bytes"] = size
+	result["print_started"] = printFlag
+
+	a.log.Info("slicer file uploaded", "command_id", cmd.ID, "filename", filename, "size", size, "print", printFlag)
+	return nil
+}
+
+// validateCloudDownloadURL is an SSRF guard: the connector must only follow a
+// download_url that points at its configured cloud host, so a leaked/forged
+// command can't make it fetch arbitrary internal URLs.
+func (a *Agent) validateCloudDownloadURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid download_url: %w", err)
+	}
+	base, err := url.Parse(a.cfg.CloudURL)
+	if err != nil {
+		return fmt.Errorf("invalid configured cloud_url: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("download_url scheme %q not allowed", u.Scheme)
+	}
+	if !strings.EqualFold(u.Host, base.Host) {
+		return fmt.Errorf("download_url host %q does not match cloud host %q", u.Host, base.Host)
+	}
 	return nil
 }
 

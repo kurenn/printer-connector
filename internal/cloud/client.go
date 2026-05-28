@@ -277,6 +277,80 @@ func (c *Client) UploadGcode(ctx context.Context, presignedURL, filePath string)
 	return nil
 }
 
+// MaxSlicerDownloadBytes bounds how much a slicer-upload download may write to
+// disk, as defense-in-depth on top of the cloud's own upload cap.
+const MaxSlicerDownloadBytes = 256 << 20 // 256 MB
+
+// DownloadToTemp streams a file from a signed cloud URL into a fresh temp file
+// and returns its path + size. The URL carries its own signed token, so no auth
+// headers are needed (mirrors UploadGcode in reverse). The caller owns the temp
+// file and must remove it. Like UploadGcode it uses a client without the short
+// total timeout — a G-code file can be tens of MB — bounded by ctx instead.
+func (c *Client) DownloadToTemp(ctx context.Context, signedURL string) (string, int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signedURL, nil)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create download request: %w", err)
+	}
+
+	client := &http.Client{
+		// No total Timeout: a large G-code download is bounded by ctx, not 5s.
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   3 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			IdleConnTimeout:       30 * time.Second,
+		},
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", 0, fmt.Errorf("download request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			msg = resp.Status
+		}
+		return "", 0, fmt.Errorf("download failed with status %d: %s", resp.StatusCode, msg)
+	}
+
+	tmp, err := os.CreateTemp("", "spoolr-slicer-*.gcode")
+	if err != nil {
+		return "", 0, fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	success := false
+	defer func() {
+		if !success {
+			tmp.Close()
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	// LimitReader to MaxSlicerDownloadBytes+1 so we can detect (and reject) a
+	// response that exceeds the cap instead of filling the disk.
+	n, err := io.Copy(tmp, io.LimitReader(resp.Body, MaxSlicerDownloadBytes+1))
+	if err != nil {
+		return "", 0, fmt.Errorf("write temp file: %w", err)
+	}
+	if n > MaxSlicerDownloadBytes {
+		return "", 0, fmt.Errorf("slicer upload exceeds %d byte limit", int64(MaxSlicerDownloadBytes))
+	}
+	if n == 0 {
+		return "", 0, fmt.Errorf("downloaded slicer upload is empty")
+	}
+	if err := tmp.Close(); err != nil {
+		return "", 0, fmt.Errorf("close temp file: %w", err)
+	}
+
+	success = true
+	return tmpPath, n, nil
+}
+
 // MarkWebcamRequestFailed marks a webcam request as failed on the Rails side,
 // preventing the connector's webcam loop from retrying it forever.
 func (c *Client) MarkWebcamRequestFailed(ctx context.Context, requestID StringOrNumber, errMsg string) error {
