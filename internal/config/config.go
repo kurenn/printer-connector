@@ -51,6 +51,9 @@ type Config struct {
 	PollCommandsSeconds  int `json:"poll_commands_seconds,omitempty"`
 	PushSnapshotsSeconds int `json:"push_snapshots_seconds,omitempty"`
 	HeartbeatSeconds     int `json:"heartbeat_seconds,omitempty"`
+	// RediscoverSeconds: interval for re-scanning the LAN to adopt printers that
+	// came online after pairing. 0 ⇒ DefaultRediscoverSeconds; negative disables.
+	RediscoverSeconds int `json:"rediscover_seconds,omitempty"`
 
 	StateDir string `json:"state_dir,omitempty"`
 

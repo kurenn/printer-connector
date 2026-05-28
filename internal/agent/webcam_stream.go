@@ -86,7 +86,7 @@ func (a *Agent) webcamStreamLoop(ctx context.Context) error {
 				continue
 			}
 
-			streamer, ok := a.drivers[req.PrinterID].(webcamStreamer)
+			streamer, ok := a.driverFor(req.PrinterID).(webcamStreamer)
 			if !ok {
 				continue // printer has no MJPEG stream capability; snapshot path covers it
 			}

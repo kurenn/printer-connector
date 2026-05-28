@@ -32,7 +32,7 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 		start := time.Now()
 		a.log.Info("executing command", "command_id", cmd.ID, "printer_id", cmd.PrinterID, "action", cmd.Action)
 
-		mc := a.drivers[cmd.PrinterID]
+		mc := a.driverFor(cmd.PrinterID)
 		if mc == nil {
 			a.completeCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
 				Status:       "failed",
@@ -316,7 +316,7 @@ func (a *Agent) executeCreateBackup(ctx context.Context, cmd cloud.Command, resu
 	// Backups pull the printer's files over Moonraker's file API, so the
 	// connector does NOT need to run on the printer. Other driver types (Bambu)
 	// don't expose this yet.
-	mc, ok := a.drivers[cmd.PrinterID].(*moonraker.Client)
+	mc, ok := a.driverFor(cmd.PrinterID).(*moonraker.Client)
 	if !ok {
 		return fmt.Errorf("remote backup is only supported for Moonraker printers (printer_id %d)", cmd.PrinterID)
 	}
@@ -405,7 +405,7 @@ func (a *Agent) executeFetchGcode(ctx context.Context, cmd cloud.Command, result
 
 	// G-code lives under Moonraker's "gcodes" file root, so this only works for
 	// Moonraker printers (Bambu et al. don't expose that API yet).
-	mc, ok := a.drivers[cmd.PrinterID].(*moonraker.Client)
+	mc, ok := a.driverFor(cmd.PrinterID).(*moonraker.Client)
 	if !ok {
 		return fmt.Errorf("gcode fetch is only supported for Moonraker printers (printer_id %d)", cmd.PrinterID)
 	}

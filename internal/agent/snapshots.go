@@ -16,10 +16,11 @@ func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 	var snaps []cloud.Snapshot
 	// statusEntries accumulates one entry per configured printer (including
 	// unreachable ones) for the local status.json written at the end of the cycle.
-	statusEntries := make([]printerStatus, 0, len(a.cfg.Printers))
+	printers := a.managedPrinters()
+	statusEntries := make([]printerStatus, 0, len(printers))
 
-	for _, p := range a.cfg.Printers {
-		mc := a.drivers[p.PrinterID]
+	for _, p := range printers {
+		mc := a.driverFor(p.PrinterID)
 		if mc == nil {
 			continue
 		}
@@ -97,7 +98,7 @@ func (a *Agent) withNormalized(printerID int, payload map[string]any) map[string
 	if payload == nil {
 		payload = map[string]any{}
 	}
-	if d := a.drivers[printerID]; d != nil {
+	if d := a.driverFor(printerID); d != nil {
 		payload["normalized"] = d.NormalizeRaw(payload)
 	}
 	return payload

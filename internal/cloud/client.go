@@ -87,6 +87,18 @@ func (c *Client) Heartbeat(ctx context.Context, hb HeartbeatRequest) error {
 	return c.doJSON(ctx, http.MethodPost, path, c.authHeaders(), hb, nil)
 }
 
+// RegisterPrinters adopts printers a running connector discovered on the LAN
+// after pairing, using its own credentials (no pairing token). Idempotent on the
+// cloud side — already-known printers come back with their existing ids.
+func (c *Client) RegisterPrinters(ctx context.Context, connectorID string, printers []PrinterInfo) ([]AdoptedPrinter, error) {
+	path := fmt.Sprintf("/api/v1/connectors/%s/printers", url.PathEscape(connectorID))
+	var out RegisterPrintersResponse
+	if err := c.doJSON(ctx, http.MethodPost, path, c.authHeaders(), RegisterPrintersRequest{Printers: printers}, &out); err != nil {
+		return nil, err
+	}
+	return out.Printers, nil
+}
+
 func (c *Client) GetCommands(ctx context.Context, connectorID string, limit int) ([]Command, error) {
 	path := fmt.Sprintf("/api/v1/connectors/%s/commands?limit=%d", url.PathEscape(connectorID), limit)
 	var out []Command
