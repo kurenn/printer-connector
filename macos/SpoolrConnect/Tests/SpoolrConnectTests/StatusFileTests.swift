@@ -263,4 +263,48 @@ final class StatusFileTests: XCTestCase {
         XCTAssertEqual(printer.state, .error)
         XCTAssertEqual(printer.error, "Thermal runaway detected")
     }
+
+    // MARK: - Staleness guard
+    //
+    // status.json without a recent `updated_at` means the agent isn't writing —
+    // the popover must NOT keep showing the last captured frame as "printing".
+
+    func testParseUpdatedAtAcceptsRFC3339() throws {
+        // Round-trip: format a known Date, parse it back, expect the same instant.
+        let original = Date(timeIntervalSince1970: 1_780_056_000)
+        let formatted = ISO8601DateFormatter().string(from: original)
+        let parsed = try XCTUnwrap(StatusFile.parseUpdatedAt(formatted))
+        XCTAssertEqual(parsed.timeIntervalSince1970, original.timeIntervalSince1970, accuracy: 1.0)
+    }
+
+    func testParseUpdatedAtReturnsNilForGarbage() {
+        XCTAssertNil(StatusFile.parseUpdatedAt(nil))
+        XCTAssertNil(StatusFile.parseUpdatedAt(""))
+        XCTAssertNil(StatusFile.parseUpdatedAt("not-a-date"))
+    }
+
+    func testIsStaleFalseForRecentTimestamp() {
+        let now = Date()
+        let recent = ISO8601DateFormatter().string(from: now.addingTimeInterval(-30))
+        XCTAssertFalse(StatusFile.isStale(updatedAt: recent, now: now))
+    }
+
+    func testIsStaleTrueForOldTimestamp() {
+        let now = Date()
+        let old = ISO8601DateFormatter().string(from: now.addingTimeInterval(-StatusFile.stalenessThreshold - 1))
+        XCTAssertTrue(StatusFile.isStale(updatedAt: old, now: now))
+    }
+
+    func testIsStaleTrueForMissingOrUnparseableTimestamp() {
+        XCTAssertTrue(StatusFile.isStale(updatedAt: nil))
+        XCTAssertTrue(StatusFile.isStale(updatedAt: ""))
+        XCTAssertTrue(StatusFile.isStale(updatedAt: "garbage"))
+    }
+
+    func testCustomThresholdHonored() {
+        let now = Date()
+        let twoSecondsAgo = ISO8601DateFormatter().string(from: now.addingTimeInterval(-2))
+        XCTAssertFalse(StatusFile.isStale(updatedAt: twoSecondsAgo, now: now, threshold: 5))
+        XCTAssertTrue(StatusFile.isStale(updatedAt: twoSecondsAgo, now: now, threshold: 1))
+    }
 }
