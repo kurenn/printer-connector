@@ -2,7 +2,7 @@
 
 > **Audience:** Rails API developers working on the PrintDock backend  
 > **Purpose:** Complete reference for integrating with the Go-based printer connector agent  
-> **Last Updated:** December 31, 2025
+> **Last Updated:** May 29, 2026
 
 ---
 
@@ -158,7 +158,7 @@ Content-Type: application/json
     "hostname": "voron-pi",
     "arch": "arm64",
     "os": "linux",
-    "version": "v0.1.0",
+    "version": "v0.5.0",
     "ip": "192.168.1.100",
     "ui_port": 80
   },
@@ -180,7 +180,7 @@ Content-Type: application/json
 | `device.hostname` | string | No | Device hostname (informational) |
 | `device.arch` | string | No | CPU architecture: `amd64`, `arm64`, `mips` |
 | `device.os` | string | No | Operating system: `linux` |
-| `device.version` | string | No | Connector version (e.g., `v0.1.0`) |
+| `device.version` | string | No | Connector version (e.g., `v0.5.0`) |
 | `device.ip` | string | No | Local IP address |
 | `device.ui_port` | int | No | Mainsail/Fluidd UI port |
 | `printers` | array | No | Array of printers (usually 1 per connector) |
@@ -269,7 +269,7 @@ X-Connector-Id: <connector_id>
 {
   "status": {
     "uptime_seconds": 3600,
-    "version": "v0.1.0"
+    "version": "v0.5.0"
   },
   "printers": [
     {
@@ -1625,5 +1625,5 @@ For questions about connector integration:
 ---
 
 **Document Version:** 1.0.0  
-**Connector Version:** v0.1.0  
-**Last Updated:** December 31, 2025
+**Connector Version:** v0.5.0  
+**Last Updated:** May 29, 2026
