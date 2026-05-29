@@ -7,6 +7,10 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+### Changed
+- The release workflow now publishes the matching `CHANGELOG.md` section as
+  the GitHub Release body (previously the release body was empty).
+
 ## [0.5.0] - 2026-05-28
 
 ### Added
