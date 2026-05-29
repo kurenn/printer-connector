@@ -53,6 +53,11 @@ type Agent struct {
 	// detect a telemetry stall; collectAndPushSnapshots writes it on success.
 	lastSnapshotPushUnix atomic.Int64
 
+	// pollTimeout caps how long a single printer's QueryObjects call may block
+	// inside collectAndPushSnapshots. Zero means use defaultPollTimeout. Set
+	// only in tests; production should leave it zero.
+	pollTimeout time.Duration
+
 	// restartDelay is the pause before superviseLoop restarts a faulted loop.
 	// Set from New(); a zero value (used in tests) restarts immediately.
 	restartDelay time.Duration

@@ -9,6 +9,19 @@ import (
 	"printer-connector/internal/driver"
 )
 
+// defaultPollTimeout caps how long a single printer's QueryObjects call may
+// block inside the snapshot loop. Without it, one unresponsive printer
+// (Moonraker accepted-but-not-answering, Bambu MQTT hung mid-publish, K1
+// asleep behind a half-open TCP socket) could stall the entire snapshot
+// cycle until the OS TCP retransmit window expires — multiple minutes —
+// during which status.json goes unwritten and every other printer is
+// silently missing from its next update. A healthy poll completes in
+// 50–300 ms; 10 s leaves ample headroom while keeping the loop's 30 s
+// default cadence intact even when several printers time out in a row.
+//
+// Tests override this via Agent.pollTimeout.
+const defaultPollTimeout = 10 * time.Second
+
 func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 	now := time.Now().UTC()
 
@@ -19,6 +32,11 @@ func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 	printers := a.managedPrinters()
 	statusEntries := make([]printerStatus, 0, len(printers))
 
+	timeout := a.pollTimeout
+	if timeout == 0 {
+		timeout = defaultPollTimeout
+	}
+
 	for _, p := range printers {
 		mc := a.driverFor(p.PrinterID)
 		if mc == nil {
@@ -26,10 +44,15 @@ func (a *Agent) collectAndPushSnapshots(ctx context.Context) error {
 		}
 		attempted++
 
-		payload, err := mc.QueryObjects(ctx)
+		pctx, cancel := context.WithTimeout(ctx, timeout)
+		payload, err := mc.QueryObjects(pctx)
+		cancel()
 		if err != nil {
 			a.log.Warn("printer query failed", "printer_id", p.PrinterID, "error", err)
 			// Record as unreachable/offline so the local status file still lists it.
+			// Timeout errors land here too — one wedged printer no longer stalls
+			// the loop, and the menu-bar app sees it flip to offline within
+			// `timeout` rather than after the OS TCP timeout (~minutes).
 			statusEntries = append(statusEntries, buildPrinterStatus(p, driver.Telemetry{}, false))
 			continue
 		}
