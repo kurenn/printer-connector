@@ -76,6 +76,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image?.isTemplate = true
             button.action = #selector(toggle(_:))
             button.target = self
+            // Left-click toggles the popover; right-click (and control-click)
+            // show the context menu — both routed through `toggle`, which
+            // branches on the current event type.
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.toolTip = "Spoolr Connect"
         }
 
@@ -95,7 +99,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Panel show/hide
 
     @objc private func toggle(_ sender: Any?) {
+        let event = NSApp.currentEvent
+        let rightClick = event?.type == .rightMouseUp
+            || (event?.modifierFlags.contains(.control) ?? false)
+        if rightClick {
+            showContextMenu()
+            return
+        }
         panel.isVisible ? close() : open()
+    }
+
+    // MARK: Right-click context menu
+    //
+    // Quality-of-life surface that doesn't require opening the popover —
+    // useful when the agent has wedged badly enough that the popover would
+    // be empty or misleading. Built fresh each time so the Launch-at-Login
+    // checkmark reflects the current SMAppService state.
+
+    private func showContextMenu() {
+        guard let button = statusItem.button else { return }
+        let menu = NSMenu()
+
+        let checkUpdates = NSMenuItem(title: "Check for Updates Now",
+                                      action: #selector(checkForUpdatesNow),
+                                      keyEquivalent: "")
+        checkUpdates.target = self
+        menu.addItem(checkUpdates)
+
+        let loginItem = NSMenuItem(title: "Launch at Login",
+                                   action: #selector(toggleLaunchAtLogin),
+                                   keyEquivalent: "")
+        loginItem.target = self
+        loginItem.state = LaunchAtLogin.isEnabled ? .on : .off
+        menu.addItem(loginItem)
+
+        menu.addItem(.separator())
+
+        let restart = NSMenuItem(title: "Restart Agent",
+                                 action: #selector(restartAgent),
+                                 keyEquivalent: "")
+        restart.target = self
+        menu.addItem(restart)
+
+        menu.addItem(.separator())
+
+        menu.addItem(withTitle: "Quit Spoolr Connect",
+                     action: #selector(NSApplication.terminate(_:)),
+                     keyEquivalent: "q")
+
+        let origin = NSPoint(x: 0, y: button.bounds.height + 4)
+        menu.popUp(positioning: nil, at: origin, in: button)
+    }
+
+    @objc private func checkForUpdatesNow() {
+        Task { await updateChecker.checkNow() }
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        LaunchAtLogin.setEnabled(!LaunchAtLogin.isEnabled)
+    }
+
+    @objc private func restartAgent() {
+        model.restartAgent()
     }
 
     private func open() {
