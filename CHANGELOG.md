@@ -26,6 +26,12 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
   poll loop). The Swift app now checks `status.json`'s `updated_at` and
   forces every printer to `offline` (clearing progress / ETA / layer) once
   the file is more than 90 s stale.
+- The snapshot loop could stall for minutes if a single printer's TCP
+  socket accepted but never replied (Moonraker mid-restart, K1 asleep,
+  Bambu MQTT hung mid-publish), because `QueryObjects` had no per-call
+  deadline. Each printer poll now runs under a 10 s `context.WithTimeout`,
+  so one unresponsive printer is recorded as unreachable within seconds
+  and the rest of the cycle still completes.
 
 ## [0.5.0] - 2026-05-28
 
