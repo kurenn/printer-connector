@@ -415,8 +415,8 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
       </div>
 
       <div class="dl-version">
-        <span class="tag">v0.4.0</span>
-        <span>Released May 26, 2026 ·</span>
+        <span class="tag">v0.5.0</span>
+        <span>Released May 28, 2026 ·</span>
         <a href="#changelog" style="color:var(--accent)">release notes →</a>
       </div>
 
@@ -479,7 +479,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
         <div class="term-body">
           <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl -fsSL <span style="color:var(--accent)">raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh</span> | bash</span></div>
           <div class="term-line"><span class="term-out">▸ detected: darwin/arm64 (macOS 14.5)</span></div>
-          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.4.0…</span><span class="term-ok">[ok]</span></div>
+          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.5.0…</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ installing Spoolr Connect.app → /Applications</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ launching menu-bar agent</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-comment"># scanning your LAN for printers…</span></div>
@@ -944,7 +944,31 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
     <div class="relog">
       <div class="relog-card">
         <div class="relog-card-head">
-          <div class="relog-version"><span class="v">v0.4.0</span><span class="latest">latest</span></div>
+          <div class="relog-version"><span class="v">v0.5.0</span><span class="latest">latest</span></div>
+          <div class="relog-date">May 28, 2026</div>
+        </div>
+        <div class="relog-body">
+          <div class="relog-section">
+            <h4>Added</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Live per-printer status in the menu bar.</b> The agent writes a local status file the app reads, so the popover shows real printer status instead of sample data.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Windows support.</b> Inno Setup installer (<span class="mono">SpoolrConnect-Setup.exe</span>) that registers a background Windows Service.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Streamed slicer uploads.</b> The agent streams g-code from a signed cloud URL straight to the printer, with optional autostart.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Periodic LAN re-discovery.</b> After pairing, the agent keeps sweeping the network and auto-adopts newly-found printers.</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Fixed</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div>Menu-bar polish — legible label contrast, a solid dark panel, a real app icon, and a working "Open dashboard" link.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="relog-card">
+        <div class="relog-card-head">
+          <div class="relog-version"><span class="v">v0.4.0</span></div>
           <div class="relog-date">May 26, 2026</div>
         </div>
         <div class="relog-body">
@@ -1029,7 +1053,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
 <!-- ═══════════════ FOOTER ═══════════════ -->
 <footer class="footer">
   <div class="wrap foot-row">
-    <span>© 2026 Spoolr · Connect v0.4.0 · MIT</span>
+    <span>© 2026 Spoolr · Connect v0.5.0 · MIT</span>
     <span class="foot-status"><span class="dot dot-green"></span><a href="https://github.com/kurenn/printer-connector">github.com/kurenn/printer-connector</a></span>
     <div class="links">
       <a href="https://www.spoolr.io/">Home</a>
