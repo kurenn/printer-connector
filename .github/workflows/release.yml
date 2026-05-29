@@ -58,9 +58,30 @@ jobs:
       - name: Generate checksums
         run: cd dist && sha256sum * > SHA256SUMS
 
+      # Pull the matching "## [X.Y.Z]" section out of CHANGELOG.md so the
+      # GitHub Release page shows the same notes as the changelog file. Only
+      # this job sets the release body; the macOS/Windows jobs below attach
+      # their assets without touching the body (action-gh-release is
+      # idempotent — first call creates the release, later calls update it).
+      - name: Extract changelog section for this tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+            /^## \[/ {
+              if (capturing) exit
+              if ($0 ~ ("\\[" ver "\\]")) capturing = 1
+              next
+            }
+            capturing { print }
+          ' CHANGELOG.md > dist/RELEASE_BODY.md
+          if [ ! -s dist/RELEASE_BODY.md ]; then
+            echo "WARNING: no [$version] section found in CHANGELOG.md — release body will be empty"
+          fi
+
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
+          body_path: dist/RELEASE_BODY.md
           files: |
             dist/printer-connector-arm64
             dist/printer-connector-amd64
