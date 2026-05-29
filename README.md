@@ -1,10 +1,11 @@
-# 🖨️ Printer Connector
+# 🖨️ Spoolr Connect (printer-connector)
 
-> A secure bridge that connects your 3D printer to the cloud, enabling remote monitoring and control from anywhere.
+> An open-source on-premise agent that bridges 3D printers on your local network to the [Spoolr](https://www.spoolr.io) cloud — outbound-only, no port forwarding, no VPN.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.23+-00ADD8.svg)](https://golang.org)
-[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20arm64%20%7C%20amd64-lightgrey.svg)](https://github.com/kurenn/printer-connector)
+[![Go Version](https://img.shields.io/badge/go-1.22-00ADD8.svg)](https://golang.org)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Raspberry%20Pi%20%7C%20K1-lightgrey.svg)](https://github.com/kurenn/printer-connector)
+[![Release](https://img.shields.io/github/v/release/kurenn/printer-connector?label=release)](https://github.com/kurenn/printer-connector/releases/latest)
 
 ## 📋 Table of Contents
 
@@ -28,35 +29,37 @@
 
 ---
 
-## 🤔 What is Printer Connector?
+## 🤔 What is Spoolr Connect?
 
-**Printer Connector** is a lightweight software agent that runs on your 3D printer (typically a Raspberry Pi running Klipper). It acts as a secure bridge between your local printer and a cloud application, allowing you to:
+**Spoolr Connect** is a small Go agent that runs on a machine inside your network (a Raspberry Pi, your Mac, a Windows PC, or the printer itself on a Creality K1) and bridges your 3D printers to the [Spoolr](https://www.spoolr.io) cloud. It speaks each printer family's native protocol — **Moonraker** for Klipper / Voron / K1, **MQTT + FTPS** for Bambu Lab in LAN mode — so you can:
 
-- 📊 **Monitor** your printer's status in real-time from anywhere
-- 🎮 **Control** your prints remotely (pause, resume, cancel, start)
-- 📸 **Receive** automatic snapshots of your printer's state
-- 🔔 **Get notified** about print progress and issues
+- 📊 **Monitor** print status, temperatures, and progress from anywhere
+- 🎮 **Control** prints remotely (pause, resume, cancel, home, start a file)
+- 📸 **See live webcam snapshots** of the print bed
+- 🚀 **Send g-code** straight from a browser-side slicer to the printer
+- 🔔 **Get push notifications** for print start, completion, and failures
 
-Think of it as a secure tunnel that lets your printer talk to the cloud without exposing it directly to the internet.
+It runs as a background service, a macOS menu-bar app, or a one-line shell installer — **whichever fits the machine you put it on**.
 
 ---
 
-## 💡 Why Use Printer Connector?
+## 💡 Why Spoolr Connect?
 
-### The Problem
-Most 3D printers on local networks can't be accessed from outside your home/office without:
+### The problem
+Most 3D printers can't be reached from outside your home / shop network without:
 - Opening ports on your router (security risk)
-- Setting up VPNs (complex for beginners)
-- Using third-party services (privacy concerns)
+- Setting up a VPN (complex for non-technical users)
+- Trusting third-party agents that ship your stream to someone else's cloud
 
-### The Solution
-Printer Connector solves this by:
-- ✅ **Running locally** on your printer's Raspberry Pi
-- ✅ **Creating outbound connections** (no open ports needed)
-- ✅ **Using secure authentication** (pairing tokens and secrets)
-- ✅ **Working with Klipper** (Moonraker API) and **Bambu Lab** (MQTT + FTPS, LAN mode)
-- ✅ **Being lightweight** (minimal resource usage, written in Go)
-- ✅ **Lean dependencies** (stdlib for Klipper; a small MQTT + FTPS client for Bambu)
+### The solution
+Spoolr Connect is **push-based**: the agent lives behind NAT, polls Spoolr for commands, and pushes telemetry out — the cloud can never reach in. Plus:
+
+- ✅ **Outbound-only HTTPS** — no open ports, no port-forwarding, no VPN
+- ✅ **Open source, MIT licensed** — read the code, build it yourself, run it offline
+- ✅ **Secure auth** — pairing tokens are single-use; per-connector secrets after pairing
+- ✅ **Multi-platform** — macOS menu-bar app, Windows Service, Linux systemd, K1 / K1 Max init.d
+- ✅ **Multi-protocol** — Klipper / Moonraker + Bambu Lab today; PrusaLink and Elegoo / SDCP planned
+- ✅ **Lightweight** — single static Go binary, < 6 MB, no runtime deps
 
 ---
 
@@ -64,58 +67,54 @@ Printer Connector solves this by:
 
 ```
 ┌─────────────────┐         ┌──────────────────┐         ┌─────────────┐
-│   Your Phone    │         │  Cloud Service   │         │  Your 3D    │
-│   or Computer   │◄────────┤  (PrintDock)     │◄────────┤  Printer    │
-│                 │         │                  │         │  + Pi       │
-│  Web Interface  │         │   REST API       │         │  Connector  │
+│   Your Phone    │         │  Spoolr Cloud    │         │  Connector  │
+│   or Computer   │◄────────┤  (spoolr.io)     │◄────────┤  + Printer  │
+│                 │         │                  │         │  on your    │
+│  Web Interface  │         │  REST  api/v1    │         │  network    │
 └─────────────────┘         └──────────────────┘         └─────────────┘
+                                     ▲                          │
+                                     │       outbound HTTPS     │
+                                     └──────────────────────────┘
 ```
 
-### Step-by-Step Process:
+The agent runs supervised background loops, each on its own cadence:
 
-1. **Pairing** (one time):
-   - You get a pairing token from your cloud service
-   - Connector uses this token to register and get permanent credentials
-   - Token is automatically removed after successful pairing
+1. **Pairing** (one time) — you paste a pairing token into the menu-bar app, the Windows installer, or `register --token <T>`. The connector discovers every printer on your LAN, registers them with the cloud under that token, and gets back a per-connector secret. The token is single-use.
+2. **Heartbeat** (~10s) — "I'm alive" so the cloud can show your fleet as online.
+3. **Telemetry snapshots** (~30s) — temperatures, print progress, current layer, ETA — pushed to `/api/v1/snapshots/batch`.
+4. **Commands** (~3s) — agent polls `/api/v1/commands` and runs anything queued: pause, resume, cancel, home, start a print, upload a g-code file, snapshot a webcam frame.
+5. **Webcam frames** — opportunistic snapshots + an optional MJPEG-style stream pushed up while a viewer is open in the web app.
+6. **Periodic re-discovery** (added in v0.5.0) — sweeps the LAN after pairing and auto-adopts newly-found printers, so plugging in a second printer doesn't require re-running the installer.
 
-2. **Heartbeat** (every 10-15 seconds):
-   - Connector sends "I'm alive" signals to the cloud
-   - Cloud knows when your printer is online/offline
-
-3. **Snapshots** (every 30 seconds):
-   - Connector reads printer status from Moonraker
-   - Sends data (temperatures, print progress, etc.) to cloud
-   - You see real-time updates in your app
-
-4. **Commands** (every 3-5 seconds):
-   - Connector asks cloud: "Any commands for me?"
-   - Cloud responds with actions (pause, resume, cancel, start print)
-   - Connector executes commands via Moonraker
-   - Results are sent back to cloud
+All cadences are configurable via `connector.json`.
 
 ---
 
 ## 🖨️ Supported Printers
 
-Printer Connector speaks each printer family's native protocol through a pluggable driver:
+Each printer family is implemented as a `driver.Driver` — the agent itself never branches on printer type. Adding a new protocol is a new driver, not a fork.
 
-### ✅ Klipper / Moonraker (HTTP)
-- Voron 2.4, Trident, 0.1, Switchwire
-- Creality K1 / K1 Max
-- Prusa MK3/MK4 (with Klipper)
-- Ender 3 / Ender 5 (with Klipper upgrade)
-- Any custom Klipper build
+### ✅ Klipper / Moonraker (HTTP + WebSocket)
+- Voron 2.4 / Trident / 0.1 / Switchwire
+- Creality **K1 / K1 Max** (Klipper-based, ships with Moonraker)
+- Prusa MK3 / MK4 running Klipper
+- Ender 3 / Ender 5 with a Klipper upgrade
+- Any custom Klipper build with Moonraker exposed (default port `7125`)
 
-### ✅ Bambu Lab (MQTT + FTPS, LAN mode)
-- X1 / X1C, P1P / P1S, A1 / A1 mini, and compatible models
-- Requires **LAN Mode / Developer Mode** enabled on the printer
-- See [docs/BAMBU_INTEGRATION.md](docs/BAMBU_INTEGRATION.md) for setup and protocol details
+### ✅ Bambu Lab (native MQTT + FTPS, LAN mode)
+- X1 / X1C, P1P / P1S, A1 / A1 mini
+- Requires **LAN Mode / Developer Mode** on the printer
+- Needs the printer's **access code** + **serial number** (the menu-bar app and the Windows installer prompt for these during pairing)
+- See [docs/BAMBU_INTEGRATION.md](docs/BAMBU_INTEGRATION.md) for the protocol details
 
-### 📋 Requirements:
-- Klipper: Moonraker API accessible (usually port 7125)
-- Bambu: printer's **access code** + **serial number**, LAN Mode enabled (MQTT :8883, FTPS :990)
-- Raspberry Pi or similar Linux device (arm64 or amd64)
-- Network connectivity
+### 🛠 Planned
+- **PrusaLink** — for Prusa printers not running Klipper
+- **Elegoo / SDCP** — Saturn, Mars resin printers
+
+### 📋 What you need
+- Klipper: Moonraker reachable on the LAN (usually `:7125`)
+- Bambu: printer in LAN Mode, MQTT `:8883` + FTPS `:990` reachable
+- A machine to host the connector — see Installation below for the four options
 
 ---
 
@@ -143,7 +142,16 @@ Before installing, make sure you have:
 
 ### Installation
 
-Choose the installation method for your printer type:
+Pick the option that matches **where you want the connector to run** — not where the printer is:
+
+| Where it runs               | Best for                                         | Option |
+|-----------------------------|--------------------------------------------------|--------|
+| 🖥  Your **Mac**             | The fastest setup; LAN discovery + GUI pairing   | [3](#option-3-macos-menu-bar-app-spoolr-connect) |
+| 🪟  A **Windows** PC         | Always-on desktop; runs as a background Service  | [4](#option-4-windows-gui-installer)             |
+| 🥧  A **Raspberry Pi**       | Same Pi already runs Klipper/Moonraker           | [1](#option-1-vanilla-klipper-raspberry-pi-with-systemd) |
+| 🟢  A **Creality K1 / K1 Max** (on the printer itself) | No extra hardware       | [2](#option-2-creality-k1--k1-max) |
+
+The agent is the same Go binary in every case — the install paths just wrap it in the right service for the host OS.
 
 #### Option 1: Vanilla Klipper (Raspberry Pi with systemd)
 
@@ -206,6 +214,10 @@ The app is ad-hoc signed (not notarized — Spoolr has no paid Apple account), s
 browser download instead shows a one-time Gatekeeper prompt. See
 **[docs/INSTALL-macOS.md](docs/INSTALL-macOS.md)** for the download/"Open Anyway"
 flow and build-from-source instructions.
+
+Once installed, the menu-bar app **checks GitHub for new releases** on launch
+(debounced) and every 24 h thereafter; when a newer version ships, the popover
+shows a one-line "Update available" banner with a Download button.
 
 #### Option 4: Windows (GUI installer)
 
@@ -282,11 +294,17 @@ INFO connector_id=abc123 printer_id=1 msg="Snapshot pushed"
 
 ---
 
-## � Updating
+## 🔄 Updating
 
-To update Printer Connector to the latest version, use the update script:
+How you update depends on how you installed:
 
-### Quick Update (Recommended)
+| Install                          | How to update                                                                 |
+|----------------------------------|-------------------------------------------------------------------------------|
+| **macOS menu-bar app**           | The app checks GitHub on launch + every 24 h and shows an "Update available" banner — click **Download**, then re-run `install-macos.sh`. |
+| **Windows Service**              | Download the latest `SpoolrConnect-Setup.exe` from [Releases](https://github.com/kurenn/printer-connector/releases/latest) and run it — the installer upgrades in place. |
+| **Linux / Raspberry Pi / K1**    | Run `update.sh` (covered below).                                              |
+
+### Linux / Pi / K1 — `update.sh`
 
 Run this **one command** on your printer:
 
@@ -422,59 +440,78 @@ The uninstaller automatically detects your installation type and removes:
 
 ## ⚙️ Configuration
 
-The configuration file is automatically created during installation at:
-- **Klipper**: `/usr/data/printer-connector/config.json`
-- **K1 Max**: `/opt/printer-connector/config.json`
+The connector config is created automatically when you pair. **You don't normally edit it by hand** — the menu-bar app, the Windows installer, and the `register` subcommand all write it for you.
 
-### Example Configuration
+### Where it lives
+
+| Host                  | Path                                                              |
+|-----------------------|-------------------------------------------------------------------|
+| macOS (menu-bar app)  | `~/Library/Application Support/Spoolr/connector.json`             |
+| Windows (Service)     | `C:\ProgramData\SpoolrConnect\connector.json`                     |
+| Linux (systemd)       | `/usr/data/printer-connector/connector.json`                      |
+| Creality K1 / K1 Max  | `/opt/printer-connector/connector.json`                           |
+
+### Example (after pairing)
 
 ```json
 {
-  "cloud_url": "https://printdock.example.com",
-  "pairing_token": "PAIR_abc123xyz",
+  "cloud_url": "https://www.spoolr.io",
+  "connector_id": "conn_abc123",
+  "connector_secret": "•••• keep this secret ••••",
   "site_name": "Workshop",
   "poll_commands_seconds": 3,
   "push_snapshots_seconds": 30,
   "heartbeat_seconds": 10,
-  "state_dir": "/var/lib/printer-connector",
-  "moonraker": [
+  "rediscover_seconds": 300,
+  "state_dir": "./state",
+  "printers": [
     {
-      "printer_id": 0,
+      "printer_id": 1,
+      "type": "moonraker",
       "name": "Voron 2.4",
-      "base_url": "http://127.0.0.1:7125",
-      "ui_port": 80
+      "base_url": "http://192.168.1.70:7125",
+      "ui_port": 4408
+    },
+    {
+      "printer_id": 2,
+      "type": "bambu",
+      "name": "X1 Carbon",
+      "host": "192.168.1.84",
+      "access_code": "12345678",
+      "serial": "01S00C123456789"
     }
   ]
 }
 ```
 
-**Note:** Each connector instance manages ONE printer. The `printer_id` is automatically assigned by the backend during pairing. If you have multiple printers, install a separate connector for each one with its own pairing token.
+One connector instance manages **every printer it discovers** under a single pairing token — you don't run one connector per printer. After pairing, the agent keeps re-scanning the LAN and adopts new printers automatically (`rediscover_seconds`).
 
-### Configuration Fields Explained
+### Fields
 
-| Field | Description | Example |
-|-------|-------------|---------|
-| `cloud_url` | Your cloud service URL | `https://printdock.example.com` |
-| `pairing_token` | One-time token (removed after pairing) | `PAIR_abc123` |
-| `connector_id` | Auto-added after pairing | `conn_xyz789` |
-| `connector_secret` | Auto-added after pairing (keep secure!) | `secret_key_here` |
-| `site_name` | Optional name for this location | `"Home Workshop"` |
-| `poll_commands_seconds` | How often to check for commands | `3` (default) |
-| `push_snapshots_seconds` | How often to send status updates | `30` (default) |
-| `heartbeat_seconds` | How often to send "I'm alive" signal | `10` (default) |
-| `state_dir` | Directory for persistent state | `/var/lib/printer-connector` |
-| `moonraker.printer_id` | Auto-assigned by backend during pairing | `0` |
-| `moonraker.name` | Display name for this printer | `"Voron 2.4"` |
-| `moonraker.base_url` | Moonraker API endpoint | `http://127.0.0.1:7125` |
-| `moonraker.ui_port` | Optional web UI port | `80` or `4409` |
+| Field                       | Description                                                                 |
+|-----------------------------|-----------------------------------------------------------------------------|
+| `cloud_url`                 | Spoolr API root. Defaults to `https://www.spoolr.io`; the `CLOUD_URL` env var overrides it (useful for self-hosted/dev backends). |
+| `connector_id`              | Written at pairing time. Identifies this connector to the cloud.            |
+| `connector_secret`          | Written at pairing time. Bearer credential — treat it like a password.      |
+| `site_name`                 | Human-readable location label (optional).                                   |
+| `poll_commands_seconds`     | How often to poll `/api/v1/commands`. Default `3`.                          |
+| `push_snapshots_seconds`    | How often to push telemetry. Default `30`.                                  |
+| `heartbeat_seconds`         | How often to send the keep-alive ping. Default `10`.                        |
+| `rediscover_seconds`        | LAN re-discovery cadence (v0.5.0+). Default `300`; `-1` disables.           |
+| `state_dir`                 | Working directory for backoff/queue state.                                  |
+| `printers[].type`           | `moonraker` (default), `bambu`, `prusalink` (planned), `sdcp` (planned).    |
+| `printers[].base_url`       | Moonraker only — the printer's Moonraker URL.                               |
+| `printers[].host`           | Bambu only — the printer's LAN IP.                                          |
+| `printers[].access_code` / `serial` | Bambu only — required to auth the MQTT + FTPS sessions.             |
+| `printers[].ui_port`        | Optional — used by the cloud to deep-link back to the printer's local UI.   |
 
-### Security Notes
+### Security
 
-⚠️ **Important:**
-- Configuration file is automatically set to `600` permissions (owner read/write only)
-- `pairing_token` is automatically removed after successful pairing
-- `connector_secret` must be kept secure - it's your permanent credential
-- Never commit config files with secrets to git
+⚠️
+- The config file is created with `600` permissions (owner read/write only)
+- The pairing token is **single-use** — once a `connector_id` + `connector_secret` are written, the token can't be re-used
+- The `connector_secret` is the only credential the agent uses after pairing — don't commit it, don't paste it into chats
+- The repo's `.gitignore` blocks every `config/*.json` and `connector.json` from being committed by accident
 
 ---
 
@@ -663,72 +700,50 @@ sudo systemctl start printer-connector
 
 ---
 
-### Command-Line Options
+### Command-Line Interface
+
+The binary is a single executable with subcommands. Run with no subcommand to start the long-running agent.
 
 ```bash
-printer-connector [OPTIONS]
-
-Options:
-  --config PATH         Path to config file (required)
-  --log-level LEVEL     Logging level: debug|info|warn|error (default: info)
-  --once               Run once and exit (useful for testing pairing)
-  --help               Show help message
+printer-connector [--config PATH] [--log-level LEVEL] [--once] [--version]
+printer-connector discover [--timeout 5s]
+printer-connector register --token <TOKEN> [--cloud <URL>] [--site <NAME>]
+printer-connector run-service        # Windows Service mode
+printer-connector install-service    # Register the Windows Service
+printer-connector uninstall-service  # Unregister the Windows Service
 ```
+
+| Flag / subcommand        | Purpose                                                                                                |
+|--------------------------|--------------------------------------------------------------------------------------------------------|
+| (no subcommand)          | Run the agent: heartbeat, snapshots, commands, webcam, rediscovery loops.                              |
+| `--config PATH`          | Config file (defaults to the platform-standard `connector.json` path).                                 |
+| `--log-level LEVEL`      | `debug` / `info` / `warn` / `error` (default `info`).                                                  |
+| `--once`                 | Run one iteration of each loop and exit — handy for smoke tests.                                       |
+| `--version`              | Print the version and exit.                                                                            |
+| `discover`               | LAN sweep (Moonraker `:7125` probe + Bambu SSDP) → JSON of found printers.                             |
+| `register --token <T>`   | Discover, register **every** printer found, write `connector.json`, exit. The macOS app shells out to this. |
 
 **Examples:**
 
 ```bash
-# Standard run
-./printer-connector --config config.json
+# Pair against production (one token registers every printer found on the LAN)
+./printer-connector register --token PAIR_abc123 --site "Workshop"
 
-# Debug mode
-./printer-connector --config config.json --log-level debug
+# Pair against a local dev backend
+./printer-connector register --token PAIR_abc123 --cloud http://localhost:3000
 
-# Test pairing without running service
-./printer-connector --config config.json --once
+# Run the agent with explicit config + debug logs
+./printer-connector --config ./connector.json --log-level debug
+
+# JSON of every printer the agent can see on the network
+./printer-connector discover --timeout 10s
 ```
 
 ---
 
-### Running Multiple Printers
+### Multiple printers — one connector
 
-**Important:** Each connector instance is paired with ONE printer. The backend assigns one printer per pairing token.
-
-If you have multiple printers, you need to:
-1. Get a separate pairing token for each printer from PrintDock
-2. Install a separate connector instance for each printer
-3. Use different configuration files and service names
-
-**Example for 2 printers:**
-
-```bash
-# Printer 1 - Voron
-sudo ./install-klipper.sh --config /usr/data/printer-connector-voron/config.json \
-  --pairing-token PAIR_voron_token
-
-# Printer 2 - Ender 3  
-sudo ./install-klipper.sh --config /usr/data/printer-connector-ender/config.json \
-  --pairing-token PAIR_ender_token
-```
-
-**Note:** Each connector will have its own systemd service and run independently.
-
----
-
-### Non-Interactive Installation
-
-For automated deployments or scripts:
-
-```bash
-sudo ./install-klipper.sh \
-  --bin ./printer-connector \
-  --cloud-url https://printdock.example.com \
-  --pairing-token PAIR_abc123 \
-  --printer "0|Voron 2.4|http://127.0.0.1:7125" \
-  --log-level info
-```
-
-**Note:** Each installation handles one printer. For multiple printers, run the installer separately with different pairing tokens.
+**Important paradigm change since v0.4.0:** a single connector instance manages **all printers on the network**, not one printer per install. `register --token <T>` discovers every printer and registers them together; after pairing, `rediscover_seconds` keeps adopting newly-found ones. You should **not** run multiple connectors on the same network — pick the host (Mac, Pi, K1, Windows PC) that's most likely to be on, install once, and the cloud sees the whole fleet.
 
 ---
 
@@ -736,9 +751,10 @@ sudo ./install-klipper.sh \
 
 ### Prerequisites for Development
 
-- Go 1.23 or higher
+- Go **1.22** (the version CI uses; newer should work)
 - Git
-- (Optional) Docker for testing
+- Xcode + Swift 6 (only if you touch `macos/SpoolrConnect`)
+- Inno Setup 6 (only if you regenerate the Windows installer)
 
 ### Setting Up Development Environment
 
@@ -793,32 +809,30 @@ Environment="CLOUD_URL=http://192.168.1.50:3000"
 
 ```
 printer-connector/
-├── cmd/
-│   └── connector/          # Main entry point
-│       └── main.go
+├── cmd/connector/                 # CLI: default (agent), discover, register, *-service
 ├── internal/
-│   ├── agent/              # Core agent logic
-│   │   ├── agent.go        # Main agent orchestration
-│   │   ├── commands.go     # Command polling and execution
-│   │   ├── heartbeat.go    # Heartbeat loop
-│   │   └── snapshots.go    # Snapshot collection and push
-│   ├── cloud/              # Cloud API client
-│   │   ├── client.go       # HTTP client implementation
-│   │   ├── types.go        # Request/response types
-│   │   └── string_or_number.go
-│   ├── config/             # Configuration management
-│   │   └── config.go       # Config loading and validation
-│   ├── moonraker/          # Moonraker API client
-│   │   └── client.go       # Moonraker API implementation
-│   └── util/               # Utilities
-│       └── backoff.go      # Exponential backoff
-├── config/
-│   └── config.dev.example.json  # Dev config template (copy → config.dev.json)
-├── install-klipper.sh      # Vanilla Klipper installer
-├── install-k1.sh           # K1 Max installer
-├── uninstall.sh            # Uninstaller
-├── go.mod                  # Go module definition
-└── README.md               # This file
+│   ├── agent/                     # Supervised loops: heartbeat, snapshots,
+│   │                              #   commands, webcam, webcam_stream, watchdog,
+│   │                              #   rediscovery, status-file writer
+│   ├── driver/                    # The protocol seam (Driver interface)
+│   ├── moonraker/                 # Driver — Klipper / Moonraker (HTTP + WS)
+│   ├── bambu/                     # Driver — Bambu Lab (MQTT + FTPS)
+│   ├── discovery/                 # LAN sweep + Bambu SSDP
+│   ├── cloud/                     # HTTP client for api/v1
+│   ├── config/                    # connector.json loader + defaults
+│   ├── gcode/                     # Active-print g-code upload (for viewer)
+│   ├── backup/                    # Printer config backups
+│   └── util/                      # Backoff, shared helpers
+├── macos/SpoolrConnect/           # SwiftPM menu-bar app (Swift 6 / SwiftUI)
+│   ├── Sources/SpoolrConnect/     # UI + state machine + agent shell-out
+│   ├── Tests/SpoolrConnectTests/  # XCTest
+│   └── scripts/build_app.sh       # Build + bundle "Spoolr Connect.app"
+├── windows/installer.iss          # Inno Setup script for SpoolrConnect-Setup.exe
+├── docs/                          # GitHub Pages site + INSTALL-{macOS,Windows}.md
+├── install-{klipper,k1,macos}.sh  # One-line installers
+├── update.sh / uninstall.sh       # Self-managed install lifecycle
+├── CHANGELOG.md                   # Keep-a-changelog
+└── .github/workflows/             # ci.yml (lint/build/test), release.yml (cut releases)
 ```
 
 ### Making Changes
@@ -876,7 +890,7 @@ A: No! The connector makes outbound connections only.
 A: No, the connector requires a compatible cloud API endpoint.
 
 **Q: Does this work with OctoPrint?**  
-A: No, it's designed specifically for Klipper/Moonraker. OctoPrint support may come in the future.
+A: Not currently. Klipper/Moonraker + Bambu Lab are supported today; PrusaLink and Elegoo / SDCP are planned. OctoPrint isn't on the near-term roadmap.
 
 **Q: How much bandwidth does it use?**  
 A: Minimal. Typically <1MB per hour (heartbeats + snapshots + occasional commands).
@@ -917,7 +931,7 @@ A: Go provides:
 A: Yes! Each connector manages one printer, so if you have multiple printers connected to the same Pi, install separate connector instances with different config files and service names.
 
 **Q: Does it support webcams?**  
-A: Not yet. Currently only status and control. Webcam streaming may be added in a future version.
+A: Yes. The agent pushes opportunistic snapshots and an optional MJPEG-style stream while a viewer is open in the Spoolr web app.
 
 **Q: What happens if my internet goes down?**  
 A: The connector will keep retrying with exponential backoff. Your printer continues working normally; you just can't access it remotely until internet is restored.
