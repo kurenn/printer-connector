@@ -20,6 +20,13 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 - The menu-bar popover footer now shows the real bundled app version
   (read from `Info.plist`) instead of a hardcoded placeholder.
 
+### Fixed
+- The menu-bar popover would advertise "PRINTING" with frozen progress
+  forever if the agent stopped writing `status.json` (crash, kill, wedged
+  poll loop). The Swift app now checks `status.json`'s `updated_at` and
+  forces every printer to `offline` (clearing progress / ETA / layer) once
+  the file is more than 90 s stale.
+
 ## [0.5.0] - 2026-05-28
 
 ### Added

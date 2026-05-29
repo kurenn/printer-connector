@@ -93,6 +93,36 @@ struct StatusFile: Decodable {
         default:                  return .idle
         }
     }
+
+    /// Maximum age of `status.json` (relative to `now`) before the file is
+    /// treated as stale and printers are forced to `.offline`.
+    ///
+    /// The agent's default snapshot cadence is 30 s; 90 s = ~3 missed writes —
+    /// large enough to absorb a transient cloud backoff or a single slow poll,
+    /// small enough that a wedged or killed agent surfaces within ~a minute
+    /// and a half rather than indefinitely (the bug this guards against: the
+    /// popover otherwise showed the last captured frame forever).
+    static let stalenessThreshold: TimeInterval = 90
+
+    /// Parse `updated_at` from the file (RFC 3339, UTC). Returns nil on a
+    /// missing or unparseable timestamp.
+    static func parseUpdatedAt(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: raw)
+    }
+
+    /// True when `updated_at` is older than `threshold`. nil / unparseable
+    /// timestamps are always stale — the agent writes `updated_at` on every
+    /// cycle, so its absence is a strong signal the file is not being
+    /// refreshed.
+    static func isStale(updatedAt raw: String?,
+                        now: Date = Date(),
+                        threshold: TimeInterval = StatusFile.stalenessThreshold) -> Bool {
+        guard let ts = parseUpdatedAt(raw) else { return true }
+        return now.timeIntervalSince(ts) > threshold
+    }
 }
 
 // MARK: - StatusPrinter

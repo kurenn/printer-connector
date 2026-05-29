@@ -225,7 +225,22 @@ final class FleetModel: ObservableObject {
     private func pollStatusFile() {
         guard let file = StatusFile.load(path: statusFilePath),
               let entries = file.printers, !entries.isEmpty else { return }
-        printers = entries.map { StatusFile.mapPrinter($0) }
+        // If the agent stopped writing (crashed, killed, wedged), the file is
+        // a frozen frame from whenever it last updated — show every printer as
+        // offline rather than letting the popover advertise stale "printing"
+        // state forever. Live fields are blanked too so the row doesn't show a
+        // misleading "18% · Layer 65/385" while marked offline.
+        let stale = StatusFile.isStale(updatedAt: file.updatedAt)
+        printers = entries.map { entry in
+            var p = StatusFile.mapPrinter(entry)
+            if stale {
+                p.state = .offline
+                p.progress = nil
+                p.eta = nil
+                p.layer = nil
+            }
+            return p
+        }
     }
 
     var linkedCount: Int { printers.count }
