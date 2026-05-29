@@ -7,7 +7,7 @@ This document describes how to build the printer-connector for different platfor
 ## Prerequisites
 
 - **Docker** (required) - Ensures consistent builds across all platforms
-- Go 1.22+ (optional, for local development only)
+- Go 1.23+ (optional, for local development only)
 
 ## Build Commands
 

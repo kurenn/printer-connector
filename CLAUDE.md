@@ -1,6 +1,6 @@
 # Spoolr Connect (printer-connector) — Claude Code Project Guide
 
-**Stack:** Go 1.22 LAN agent (`cmd/connector` + `internal/*`) + Swift 6 SwiftUI macOS menu-bar app (`macos/SpoolrConnect`, SwiftPM).
+**Stack:** Go 1.23 LAN agent (`cmd/connector` + `internal/*`) + Swift 6 SwiftUI macOS menu-bar app (`macos/SpoolrConnect`, SwiftPM).
 
 This is the on-premise **connector** that bridges 3D printers on a local network (Klipper/Moonraker, Bambu Lab; PrusaLink & Elegoo/SDCP planned) to the Spoolr cloud (the `print_dock` Rails app). It is **push-based**: the connector lives behind NAT, so the cloud can never reach in — the agent *polls* the cloud for commands and *pushes* heartbeats, telemetry snapshots, webcam frames, backups, and g-code out to the `api/v1` namespace. Treat pairing/registration, the cloud client, remote printer-control commands, and anything that drives physical hardware with extra care — they cross trust boundaries.
 

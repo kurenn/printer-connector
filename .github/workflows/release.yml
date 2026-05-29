@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.23"
 
       - name: Cross-compile connector binaries
         env:
@@ -103,7 +103,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.23"
 
       - name: Build universal Spoolr Connect.app
         env:
@@ -133,7 +133,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.23"
 
       - name: Build Windows connector binary
         env:
