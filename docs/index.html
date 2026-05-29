@@ -415,8 +415,8 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
       </div>
 
       <div class="dl-version">
-        <span class="tag">v0.5.0</span>
-        <span>Released May 28, 2026 ·</span>
+        <span class="tag">v0.6.0</span>
+        <span>Released May 29, 2026 ·</span>
         <a href="#changelog" style="color:var(--accent)">release notes →</a>
       </div>
 
@@ -479,7 +479,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
         <div class="term-body">
           <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl -fsSL <span style="color:var(--accent)">raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh</span> | bash</span></div>
           <div class="term-line"><span class="term-out">▸ detected: darwin/arm64 (macOS 14.5)</span></div>
-          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.5.0…</span><span class="term-ok">[ok]</span></div>
+          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.6.0…</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ installing Spoolr Connect.app → /Applications</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ launching menu-bar agent</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-comment"># scanning your LAN for printers…</span></div>
@@ -944,7 +944,33 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
     <div class="relog">
       <div class="relog-card">
         <div class="relog-card-head">
-          <div class="relog-version"><span class="v">v0.5.0</span><span class="latest">latest</span></div>
+          <div class="relog-version"><span class="v">v0.6.0</span><span class="latest">latest</span></div>
+          <div class="relog-date">May 29, 2026</div>
+        </div>
+        <div class="relog-body">
+          <div class="relog-section">
+            <h4>Added</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Auto-update check.</b> The menu-bar app polls GitHub on launch (debounced) and every 24 h after — when a newer release ships, the popover shows a one-line "Update available" banner with a Download button.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Launch at Login.</b> Right-click the menu-bar icon to register the app with <span class="mono">SMAppService</span>, so the agent comes back up after every reboot without re-launching by hand.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Agent health + Restart.</b> A footer warning row in the popover surfaces "Agent stopped" (red) or "Agent not responding" (yellow) with a one-click <span class="mono">Restart Agent</span> button.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Right-click menu</b> on the menu-bar icon: <span class="mono">Check for Updates Now</span>, <span class="mono">Launch at Login</span>, <span class="mono">Restart Agent</span>, <span class="mono">Quit</span>.</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Fixed</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div>The popover no longer advertises "PRINTING" with frozen progress when the agent has stopped writing. <span class="mono">status.json</span> is checked for staleness and every printer falls back to offline after 90 s.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div>One unresponsive printer can no longer stall the whole snapshot loop — each <span class="mono">QueryObjects</span> call now runs under a 10 s timeout, so a wedged printer flips to offline in seconds instead of minutes.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div>Popover footer shows the real bundled app version instead of a hardcoded placeholder.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="relog-card">
+        <div class="relog-card-head">
+          <div class="relog-version"><span class="v">v0.5.0</span></div>
           <div class="relog-date">May 28, 2026</div>
         </div>
         <div class="relog-body">
@@ -1053,7 +1079,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
 <!-- ═══════════════ FOOTER ═══════════════ -->
 <footer class="footer">
   <div class="wrap foot-row">
-    <span>© 2026 Spoolr · Connect v0.5.0 · MIT</span>
+    <span>© 2026 Spoolr · Connect v0.6.0 · MIT</span>
     <span class="foot-status"><span class="dot dot-green"></span><a href="https://github.com/kurenn/printer-connector">github.com/kurenn/printer-connector</a></span>
     <div class="links">
       <a href="https://www.spoolr.io/">Home</a>
