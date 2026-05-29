@@ -3,7 +3,7 @@
 > An open-source on-premise agent that bridges 3D printers on your local network to the [Spoolr](https://www.spoolr.io) cloud — outbound-only, no port forwarding, no VPN.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Go Version](https://img.shields.io/badge/go-1.22-00ADD8.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.23-00ADD8.svg)](https://golang.org)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Raspberry%20Pi%20%7C%20K1-lightgrey.svg)](https://github.com/kurenn/printer-connector)
 [![Release](https://img.shields.io/github/v/release/kurenn/printer-connector?label=release)](https://github.com/kurenn/printer-connector/releases/latest)
 
@@ -751,7 +751,7 @@ printer-connector uninstall-service  # Unregister the Windows Service
 
 ### Prerequisites for Development
 
-- Go **1.22** (the version CI uses; newer should work)
+- Go **1.23** (the version CI uses; newer should work)
 - Git
 - Xcode + Swift 6 (only if you touch `macos/SpoolrConnect`)
 - Inno Setup 6 (only if you regenerate the Windows installer)

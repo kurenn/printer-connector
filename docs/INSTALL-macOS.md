@@ -76,7 +76,7 @@ cd printer-connector/macos/SpoolrConnect
 ./scripts/build_app.sh --install
 ```
 
-(Requires Xcode/Swift and Go 1.22+.)
+(Requires Xcode/Swift and Go 1.23+.)
 
 ---
 
