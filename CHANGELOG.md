@@ -7,6 +7,8 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-29
+
 ### Added
 - The macOS menu-bar app now checks GitHub for new releases — on launch
   (debounced to once per 12h) and every 24h after — and shows a one-line
