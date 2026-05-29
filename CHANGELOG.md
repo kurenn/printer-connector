@@ -13,6 +13,18 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
   "Update available" banner at the top of the popover when a newer version
   is published. "Download" opens the release page; "Dismiss" hides the
   banner until a strictly newer version appears.
+- **Launch at Login** — right-click the menu-bar icon to toggle
+  `SMAppService.mainApp` registration, so the agent comes back up
+  automatically after every reboot without having to relaunch the app
+  by hand.
+- **Right-click menu** on the menu-bar icon: *Check for Updates Now*
+  (force-runs the update check, ignoring the 24 h debounce),
+  *Launch at Login* (toggle), *Restart Agent*, *Quit*.
+- **Agent-health warning row** in the popover footer: shows "Agent
+  stopped" (red) when the bundled subprocess isn't running, or
+  "Agent not responding" (yellow) when it's alive but hasn't written
+  status.json in over 90 s. Both come with a one-click **Restart
+  Agent** button.
 
 ### Changed
 - The release workflow now publishes the matching `CHANGELOG.md` section as

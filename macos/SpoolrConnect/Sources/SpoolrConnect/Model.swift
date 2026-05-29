@@ -17,6 +17,15 @@ enum PrinterState: String, Codable {
     case printing, idle, error, offline
 }
 
+/// Combined health of the bundled connector agent + the freshness of its
+/// status.json output. Drives the popover's "agent down" / "agent stalled"
+/// surfaces and the Restart-agent button.
+enum AgentHealth: Equatable {
+    case healthy   // process running, status.json fresh
+    case stalled   // process running, status.json older than the staleness threshold
+    case down      // process not running
+}
+
 struct Printer: Identifiable, Equatable {
     let id: String
     var name: String
@@ -80,6 +89,14 @@ final class FleetModel: ObservableObject {
     // The cloud the connector is paired to (from connector.json) — the "Open
     // dashboard" target. Falls back to production when unknown.
     @Published var cloudURL: String?
+
+    /// Health of the bundled agent + freshness of its status writes. The
+    /// status-poll timer recomputes this each tick; the popover footer
+    /// surfaces a warning + "Restart Agent" button when it's not `.healthy`.
+    @Published var agentHealth: AgentHealth = .healthy
+
+    /// Injectable for tests; production reads the real subprocess state.
+    var isAgentRunning: () -> Bool = { AgentService.isRunning }
 
     // Status-file polling (paired sessions only).
     private var statusPollTimer: AnyCancellable?
@@ -222,18 +239,34 @@ final class FleetModel: ObservableObject {
         statusPollTimer = nil
     }
 
+    /// Pure decision: subprocess dead ⇒ `.down`; alive but `updated_at`
+    /// missing / older than the staleness threshold ⇒ `.stalled`; otherwise
+    /// `.healthy`. Split out from `pollStatusFile` so the logic is unit-
+    /// testable without faking `~/Library/Application Support/Spoolr`.
+    static func computeAgentHealth(processAlive: Bool,
+                                   updatedAt: String?,
+                                   now: Date = Date()) -> AgentHealth {
+        if !processAlive { return .down }
+        if StatusFile.isStale(updatedAt: updatedAt, now: now) { return .stalled }
+        return .healthy
+    }
+
     private func pollStatusFile() {
-        guard let file = StatusFile.load(path: statusFilePath),
-              let entries = file.printers, !entries.isEmpty else { return }
-        // If the agent stopped writing (crashed, killed, wedged), the file is
-        // a frozen frame from whenever it last updated — show every printer as
-        // offline rather than letting the popover advertise stale "printing"
-        // state forever. Live fields are blanked too so the row doesn't show a
-        // misleading "18% · Layer 65/385" while marked offline.
-        let stale = StatusFile.isStale(updatedAt: file.updatedAt)
+        let processAlive = isAgentRunning()
+        let file = StatusFile.load(path: statusFilePath)
+        let health = Self.computeAgentHealth(processAlive: processAlive,
+                                             updatedAt: file?.updatedAt)
+        if agentHealth != health { agentHealth = health }
+
+        // Rows: only rewrite the printers list if the file actually parsed —
+        // otherwise the config-derived placeholder list from applyPaired
+        // stays visible (covers the just-paired window before the first
+        // snapshot lands).
+        guard let entries = file?.printers, !entries.isEmpty else { return }
+        let forceOffline = (health != .healthy)
         printers = entries.map { entry in
             var p = StatusFile.mapPrinter(entry)
-            if stale {
+            if forceOffline {
                 p.state = .offline
                 p.progress = nil
                 p.eta = nil
@@ -241,6 +274,18 @@ final class FleetModel: ObservableObject {
             }
             return p
         }
+    }
+
+    /// Stop and re-spawn the bundled agent subprocess. Wired to the
+    /// "Restart Agent" button in the popover footer and the right-click
+    /// menu item — the only recovery path for a wedged or crashed agent
+    /// short of quitting the app.
+    func restartAgent() {
+        AgentService.restart()
+        // Optimistically reset health; the next status-poll tick (≤3 s)
+        // will overwrite based on whether the subprocess actually came up.
+        agentHealth = .healthy
+        pollStatusFile()
     }
 
     var linkedCount: Int { printers.count }

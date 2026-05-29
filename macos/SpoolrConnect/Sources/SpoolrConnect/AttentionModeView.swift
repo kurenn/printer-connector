@@ -63,6 +63,9 @@ struct AttentionModeView: View {
             .padding(.bottom, 8)
             .padding(.top, 2)
 
+            if model.agentHealth != .healthy {
+                AgentHealthRow(health: model.agentHealth) { model.restartAgent() }
+            }
             FootStrip(left: "v\(model.version) · \(model.linkedCount) linked", rightLabel: "Quit") {
                 NSApplication.shared.terminate(nil)
             }

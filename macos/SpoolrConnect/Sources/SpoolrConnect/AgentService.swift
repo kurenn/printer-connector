@@ -7,6 +7,11 @@ import Foundation
 enum AgentService {
     private static var process: Process?
 
+    /// True if the bundled agent subprocess is currently alive. Used by the
+    /// popover's health indicator and the right-click "Restart Agent" path
+    /// to decide whether to show the agent as down.
+    static var isRunning: Bool { process?.isRunning ?? false }
+
     /// Default connector.json path written by `register` (~/Library/Application Support/Spoolr).
     static func configPath() -> String {
         let base = FileManager.default
