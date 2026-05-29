@@ -7,9 +7,18 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+### Added
+- The macOS menu-bar app now checks GitHub for new releases — on launch
+  (debounced to once per 12h) and every 24h after — and shows a one-line
+  "Update available" banner at the top of the popover when a newer version
+  is published. "Download" opens the release page; "Dismiss" hides the
+  banner until a strictly newer version appears.
+
 ### Changed
 - The release workflow now publishes the matching `CHANGELOG.md` section as
   the GitHub Release body (previously the release body was empty).
+- The menu-bar popover footer now shows the real bundled app version
+  (read from `Info.plist`) instead of a hardcoded placeholder.
 
 ## [0.5.0] - 2026-05-28
 
