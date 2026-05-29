@@ -1,12 +1,23 @@
 import SwiftUI
+import AppKit
 
 /// Hosts whichever of the five views the state machine selects, on the vibrant
 /// popover material. Fixed 340pt width; height is content-driven.
 struct RootView: View {
     @EnvironmentObject var model: FleetModel
+    @EnvironmentObject var updateChecker: UpdateChecker
 
     var body: some View {
-        content
+        VStack(spacing: 0) {
+            if let info = updateChecker.availableUpdate {
+                UpdateBanner(
+                    info: info,
+                    onDownload: { NSWorkspace.shared.open(info.releaseURL) },
+                    onDismiss: { updateChecker.dismiss() }
+                )
+            }
+            content
+        }
             .frame(width: Theme.popoverWidth)
             .background(
                 // Opaque, top-lit dark panel to match the design. The 0.55-alpha

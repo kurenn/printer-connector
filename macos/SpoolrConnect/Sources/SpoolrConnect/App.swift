@@ -40,10 +40,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return FleetModel.bootstrap(configPath: AgentService.configPath())
     }()
 
+    // Initialized inside applicationDidFinishLaunching because UpdateChecker is
+    // @MainActor and AppDelegate property initializers run nonisolated.
+    private var updateChecker: UpdateChecker!
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
+        updateChecker = UpdateChecker()
 
-        let hosting = NSHostingController(rootView: RootView().environmentObject(model))
+        let hosting = NSHostingController(
+            rootView: RootView()
+                .environmentObject(model)
+                .environmentObject(updateChecker)
+        )
         hosting.sizingOptions = .preferredContentSize // panel tracks SwiftUI size
 
         let p = KeyablePanel(
@@ -73,6 +82,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if FileManager.default.fileExists(atPath: AgentService.configPath()) {
             AgentService.start()
         }
+
+        // Begin polling GitHub /releases/latest for newer builds (debounced
+        // on-launch + 24h timer). See UpdateChecker for the cadence rules.
+        updateChecker.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

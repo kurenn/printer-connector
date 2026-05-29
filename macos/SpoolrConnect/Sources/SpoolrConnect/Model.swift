@@ -73,7 +73,10 @@ final class FleetModel: ObservableObject {
 
     // Connection metadata shown in the header / foot strip.
     @Published var workspace: String = "northshore"
-    @Published var version: String = "0.18.2"
+    /// Bundle short version (stamped by build_app.sh / the release workflow);
+    /// "dev" during local SwiftPM runs where there is no Info.plist.
+    @Published var version: String =
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
     // The cloud the connector is paired to (from connector.json) — the "Open
     // dashboard" target. Falls back to production when unknown.
     @Published var cloudURL: String?
