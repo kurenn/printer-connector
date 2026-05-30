@@ -134,9 +134,9 @@ Before installing, make sure you have:
    ```
    Or for K1 Max: `ssh root@YOUR_K1_IP`
 
-3. **A pairing token from your cloud service**
-   - Get this from your PrintDock account settings
-   - It looks like: `PAIR_abc123xyz456`
+3. **A pairing token from your cloud account**
+   - On [spoolr.io](https://www.spoolr.io), go to **Connectors → Add Connector** and copy the code shown.
+   - It looks like: `PAIR_abc123xyz456` — single-use, expires within ~24 h.
 
 ---
 
@@ -175,9 +175,9 @@ sudo ./install-klipper.sh
 ```
 
 The installer will ask you for:
-1. **Cloud URL**: Your PrintDock server address (e.g., `https://printdock.example.com`)
-2. **Pairing Token**: The token you got from PrintDock (one token per printer)
-3. **Printer Details**: Name and Moonraker URL for your printer
+1. **Cloud URL**: Defaults to `https://www.spoolr.io`; override only if you self-host.
+2. **Pairing Token**: The code from your Spoolr connectors page — one token registers every printer on the LAN.
+3. **Printer Details**: Auto-discovered; the installer only prompts if discovery returned nothing.
 
 #### Option 2: Creality K1 / K1 Max
 
@@ -202,9 +202,10 @@ sudo sh install-k1.sh
 
 #### Option 3: macOS menu-bar app (Spoolr Connect)
 
-Prefer a desktop app to scan, pair, and run the connector from your Mac? Install
-the **Spoolr Connect** menu-bar app (universal, Apple Silicon + Intel) with **one
-command** — no security prompt this way:
+The **Spoolr Connect** menu-bar app (universal, Apple Silicon + Intel) is both the
+installer *and* the day-to-day dashboard — it scans your LAN, pairs your fleet,
+runs the agent in the background, and surfaces live status without ever needing a
+terminal. Install with **one command** (no security prompt this way):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash
@@ -215,9 +216,28 @@ browser download instead shows a one-time Gatekeeper prompt. See
 **[docs/INSTALL-macOS.md](docs/INSTALL-macOS.md)** for the download/"Open Anyway"
 flow and build-from-source instructions.
 
-Once installed, the menu-bar app **checks GitHub for new releases** on launch
-(debounced) and every 24 h thereafter; when a newer version ships, the popover
-shows a one-line "Update available" banner with a Download button.
+**What the popover shows (left-click the menu-bar icon):**
+
+- 📊 **Live per-printer status** — every printer in your fleet with its current
+  state (printing / idle / error / offline), job filename, layer, progress %, and
+  ETA, updated every 3 s from the agent's local `status.json`.
+- 🟢 **Agent-health row** — if the bundled agent subprocess stops writing for
+  > 90 s, the popover surfaces "Agent not responding" (yellow) or "Agent
+  stopped" (red) with a one-click **Restart Agent** button.
+- ⬆️ **Update banner** — when a newer release ships, a yellow strip at the top
+  of the popover offers **Download**. The app checks GitHub on launch
+  (debounced to once per 12 h) and every 24 h after.
+
+**What the right-click menu does (right-click or ctrl-click the menu-bar icon):**
+
+- **Check for Updates Now** — forces an immediate check, ignoring the 24 h
+  debounce.
+- **Launch at Login** — toggle that registers the app with
+  `SMAppService.mainApp`, so the agent comes back up automatically after every
+  reboot.
+- **Restart Agent** — same as the popover button, useful if you've already
+  closed the popover.
+- **Quit Spoolr Connect**.
 
 #### Option 4: Windows (GUI installer)
 
@@ -300,7 +320,7 @@ How you update depends on how you installed:
 
 | Install                          | How to update                                                                 |
 |----------------------------------|-------------------------------------------------------------------------------|
-| **macOS menu-bar app**           | The app checks GitHub on launch + every 24 h and shows an "Update available" banner — click **Download**, then re-run `install-macos.sh`. |
+| **macOS menu-bar app**           | The app checks GitHub on launch + every 24 h and shows an "Update available" banner — click **Download**, then re-run `install-macos.sh`. Or right-click the menu-bar icon → **Check for Updates Now** to skip the debounce. |
 | **Windows Service**              | Download the latest `SpoolrConnect-Setup.exe` from [Releases](https://github.com/kurenn/printer-connector/releases/latest) and run it — the installer upgrades in place. |
 | **Linux / Raspberry Pi / K1**    | Run `update.sh` (covered below).                                              |
 
@@ -853,7 +873,7 @@ printer-connector/
 
 ## 🔌 API Integration (for Backend Developers)
 
-**Are you building or maintaining the Rails/PrintDock backend?**
+**Are you building or maintaining the Spoolr Rails backend (the `print_dock` repo)?**
 
 The connector communicates with your API using a specific protocol and expects certain endpoints and response formats. We've created comprehensive documentation to help you integrate:
 
@@ -881,7 +901,7 @@ This document includes:
 ### General Questions
 
 **Q: Is this free?**  
-A: The connector is open-source and free. Your cloud service (PrintDock) may have its own pricing.
+A: The connector is open-source (MIT) and free. The cloud service it pairs with — [Spoolr](https://www.spoolr.io) — may have its own pricing.
 
 **Q: Do I need to open ports on my router?**  
 A: No! The connector makes outbound connections only.
@@ -894,6 +914,14 @@ A: Not currently. Klipper/Moonraker + Bambu Lab are supported today; PrusaLink a
 
 **Q: How much bandwidth does it use?**  
 A: Minimal. Typically <1MB per hour (heartbeats + snapshots + occasional commands).
+
+**Q: How do I know the agent is actually running?**  
+A: On macOS the popover surfaces it directly — a green dot in the header
+means healthy, yellow ("Agent not responding") means the agent hasn't written
+its status file in > 90 s, red ("Agent stopped") means the subprocess died.
+Both yellow and red come with a one-click **Restart Agent** button. On Linux /
+Pi / K1, `systemctl status printer-connector` (or `/opt/printer-connector/service.sh status` on the K1) is the source of truth; on Windows, look for **Spoolr
+Connect** under `services.msc`.
 
 ---
 
