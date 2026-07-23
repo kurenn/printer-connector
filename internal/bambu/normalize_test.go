@@ -1,6 +1,8 @@
 package bambu
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"printer-connector/internal/driver"
@@ -216,5 +218,38 @@ func TestPrinterModel(t *testing.T) {
 				t.Errorf("printerModel = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// Bambu's LAN protocol has no elapsed field, so elapsed must be absent rather
+// than a hard 0 — a zero made the cloud's elapsed+remaining total under-report.
+// Real A1 mini shape: mc_percent/layers/remaining present, nothing for elapsed.
+func TestElapsedIsAbsentForBambu(t *testing.T) {
+	report := map[string]any{"print": map[string]any{
+		"gcode_state":       "RUNNING",
+		"mc_percent":        62.0,
+		"mc_remaining_time": 18.0,
+		"layer_num":         113.0,
+		"total_layer_num":   240.0,
+	}}
+
+	got := Normalize(report)
+	if got.Job == nil {
+		t.Fatal("Job = nil")
+	}
+	if got.Job.ElapsedS != nil {
+		t.Errorf("elapsed_s = %v, want nil (Bambu never reports elapsed)", *got.Job.ElapsedS)
+	}
+	// The fields Bambu does report must still come through.
+	if got.Job.RemainingS == nil || *got.Job.RemainingS != 1080 {
+		t.Errorf("remaining_s = %v, want 1080", got.Job.RemainingS)
+	}
+
+	b, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if bytes.Contains(b, []byte("elapsed_s")) {
+		t.Errorf("elapsed_s should not appear on the wire for Bambu, got: %s", b)
 	}
 }
