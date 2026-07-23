@@ -1,6 +1,6 @@
 // Package driver defines the protocol-agnostic contract that every printer
 // family (Moonraker, Bambu, PrusaLink, Elegoo SDCP) implements, together with
-// the canonical telemetry shape shared with the cloud via print-contracts
+// the canonical telemetry shape shared with the cloud via spoolr-contracts
 // (schemas/printer_telemetry.json, schema_version 1).
 //
 // The agent talks to printers exclusively through Driver, so adding a protocol
@@ -72,7 +72,7 @@ const (
 )
 
 // Telemetry is the normalized printer state. It mirrors
-// print-contracts/schemas/printer_telemetry.json; drivers are responsible for
+// spoolr-contracts/schemas/printer_telemetry.json; drivers are responsible for
 // translating their native protocol into this shape.
 type Telemetry struct {
 	SchemaVersion int     `json:"schema_version"`
