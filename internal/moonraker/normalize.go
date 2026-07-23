@@ -55,7 +55,11 @@ func Normalize(raw map[string]any) driver.Telemetry {
 
 	job := driver.Job{
 		Filename: getString(printStats, "filename"),
-		ElapsedS: int64(getFloat(printStats, "print_duration")),
+	}
+	// print_duration is Moonraker's elapsed time. Only set it when actually
+	// reported — absent print_stats means elapsed is unknown, not zero.
+	if secs, ok := int64Ptr(printStats, "print_duration"); ok {
+		job.ElapsedS = secs
 	}
 	if vs := childMap(status, "virtual_sdcard"); vs != nil {
 		job.Progress = getFloat(vs, "progress")
@@ -164,6 +168,23 @@ func intPtr(m map[string]any, k string) (*int, bool) {
 		return &i, true
 	case int:
 		i := v
+		return &i, true
+	}
+	return nil, false
+}
+
+// int64Ptr is intPtr for the int64 fields of the canonical contract, so a value
+// the printer never reported stays nil instead of collapsing to zero.
+func int64Ptr(m map[string]any, k string) (*int64, bool) {
+	if m == nil {
+		return nil, false
+	}
+	switch v := m[k].(type) {
+	case float64:
+		i := int64(v)
+		return &i, true
+	case int:
+		i := int64(v)
 		return &i, true
 	}
 	return nil, false

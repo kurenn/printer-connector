@@ -86,10 +86,16 @@ type Telemetry struct {
 }
 
 // Job describes the active or most recent print.
+//
+// ElapsedS is a pointer because not every protocol reports it: Bambu's LAN
+// protocol has no elapsed field at all, so a plain int64 published a hard 0 —
+// a wrong value rather than an absent one, which made the cloud's
+// elapsed + remaining total silently under-report. nil means "unknown" and is
+// omitted from the wire, which the cloud already treats as absent.
 type Job struct {
 	Filename     string  `json:"filename,omitempty"`
 	Progress     float64 `json:"progress"`
-	ElapsedS     int64   `json:"elapsed_s"`
+	ElapsedS     *int64  `json:"elapsed_s,omitempty"`
 	RemainingS   *int64  `json:"remaining_s,omitempty"`
 	CurrentLayer *int    `json:"current_layer,omitempty"`
 	TotalLayers  *int    `json:"total_layers,omitempty"`

@@ -1,6 +1,7 @@
 package moonraker
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -63,8 +64,8 @@ func TestNormalize_PrintingSnapshot(t *testing.T) {
 	if got.Job.Progress != 0.42 {
 		t.Errorf("progress = %v, want 0.42", got.Job.Progress)
 	}
-	if got.Job.ElapsedS != 1260 {
-		t.Errorf("elapsed_s = %d, want 1260", got.Job.ElapsedS)
+	if got.Job.ElapsedS == nil || *got.Job.ElapsedS != 1260 {
+		t.Errorf("elapsed_s = %v, want 1260", got.Job.ElapsedS)
 	}
 	if got.Job.CurrentLayer == nil || *got.Job.CurrentLayer != 84 {
 		t.Errorf("current_layer = %v, want 84", got.Job.CurrentLayer)
@@ -143,5 +144,35 @@ func TestNormalize_EmptyIsSafe(t *testing.T) {
 	}
 	if got.Temps != nil {
 		t.Errorf("expected no temps for empty input, got %+v", got.Temps)
+	}
+}
+
+// A printer that reports no print_duration must yield a nil elapsed rather than
+// a zero, so the cloud can tell "not reported" from "zero seconds in".
+func TestNormalizeOmitsElapsedWhenNotReported(t *testing.T) {
+	raw := map[string]any{"result": map[string]any{"status": map[string]any{
+		"print_stats": map[string]any{"state": "standby", "filename": ""},
+	}}}
+	got := Normalize(raw)
+	if got.Job == nil {
+		t.Fatal("Job = nil")
+	}
+	if got.Job.ElapsedS != nil {
+		t.Errorf("elapsed_s = %v, want nil when print_duration is absent", *got.Job.ElapsedS)
+	}
+}
+
+// elapsed_s must be omitted from the wire when unknown — the cloud reads a
+// missing key as "unknown", but a present 0 as a real reading.
+func TestElapsedOmittedFromJSONWhenNil(t *testing.T) {
+	raw := map[string]any{"result": map[string]any{"status": map[string]any{
+		"print_stats": map[string]any{"state": "standby"},
+	}}}
+	b, err := json.Marshal(Normalize(raw))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if bytes.Contains(b, []byte("elapsed_s")) {
+		t.Errorf("elapsed_s should be absent from JSON when unknown, got: %s", b)
 	}
 }
