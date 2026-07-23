@@ -2,7 +2,10 @@ package bambu
 
 import (
 	"bytes"
+	"crypto/md5" // #nosec G501 — Bambu's protocol specifies md5 for file verification, not security
 	"crypto/tls"
+	"encoding/hex"
+	"io"
 	"net"
 	"path"
 	"time"
@@ -42,6 +45,30 @@ func ftpsDial(host, accessCode string) (*ftp.ServerConn, error) {
 		return nil, err
 	}
 	return conn, nil
+}
+
+// ftpsMD5 streams a file back from the printer and returns its md5 hex digest.
+// StartPrint sends this in the project_file command; the firmware verifies it
+// before printing. Streaming (io.Copy into the hash) avoids holding a large 3MF
+// in memory just to fingerprint it.
+func ftpsMD5(host, accessCode, filename string) (string, error) {
+	conn, err := ftpsDial(host, accessCode)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = conn.Quit() }()
+
+	r, err := conn.Retr(printerPath(filename))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = r.Close() }()
+
+	h := md5.New() // #nosec G401 — file-integrity digest required by Bambu's protocol, not a security hash
+	if _, err := io.Copy(h, r); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func ftpsUpload(host, accessCode, filename string, content []byte) error {

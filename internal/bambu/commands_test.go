@@ -55,7 +55,7 @@ func TestPushAllRequestShape(t *testing.T) {
 
 func TestProjectFileRequestShape(t *testing.T) {
 	var env map[string]map[string]any
-	if err := json.Unmarshal(projectFileRequest(7, "Cool Model.3mf"), &env); err != nil {
+	if err := json.Unmarshal(projectFileRequest(7, "Cool Model.3mf", "abc123def"), &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	p := env["print"]
@@ -67,6 +67,9 @@ func TestProjectFileRequestShape(t *testing.T) {
 	}
 	if p["url"] != "ftp:///Cool Model.3mf" {
 		t.Errorf("url = %v, want ftp:///Cool Model.3mf", p["url"])
+	}
+	if p["md5"] != "abc123def" {
+		t.Errorf("md5 = %v, want abc123def", p["md5"])
 	}
 	if p["subtask_name"] != "Cool Model" {
 		t.Errorf("subtask_name = %v, want 'Cool Model' (extension stripped)", p["subtask_name"])
@@ -131,7 +134,7 @@ func TestProjectFileRequestPaths(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var env map[string]map[string]any
-			if err := json.Unmarshal(projectFileRequest(1, tt.filename), &env); err != nil {
+			if err := json.Unmarshal(projectFileRequest(1, tt.filename, ""), &env); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
 			p := env["print"]
