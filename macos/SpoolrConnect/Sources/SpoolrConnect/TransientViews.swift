@@ -309,14 +309,7 @@ struct TokenEntryView: View {
                         .multilineTextAlignment(.center).padding(.top, 8)
                 }
 
-                Toggle(isOn: $model.includeBambu) {
-                    Text("I have Bambu Lab printers")
-                        .font(Theme.sans(11.5)).foregroundColor(Theme.text2)
-                }
-                .toggleStyle(.checkbox)
-                .padding(.top, 12)
-
-                AccentFillButton(title: "Connect") { model.register() }.padding(.top, 10)
+                AccentFillButton(title: "Connect") { model.register() }.padding(.top, 14)
                 Button("Scan this network instead") { model.beginScan() }.buttonStyle(.plain)
                     .font(Theme.sans(11.5)).foregroundColor(Theme.text2).padding(.vertical, 7)
             }

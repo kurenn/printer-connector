@@ -417,7 +417,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
       </div>
 
       <div class="dl-version">
-        <span class="tag">v0.7.0</span>
+        <span class="tag">v0.7.1</span>
         <span>Released May 29, 2026 ·</span>
         <a href="#changelog" style="color:var(--accent)">release notes →</a>
       </div>
@@ -481,7 +481,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
         <div class="term-body">
           <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl -fsSL <span style="color:var(--accent)">raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh</span> | bash</span></div>
           <div class="term-line"><span class="term-out">▸ detected: darwin/arm64 (macOS 14.5)</span></div>
-          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.7.0…</span><span class="term-ok">[ok]</span></div>
+          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.7.1…</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ installing Spoolr Connect.app → /Applications</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ launching menu-bar agent</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-comment"># scanning your LAN for printers…</span></div>
@@ -952,7 +952,23 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
     <div class="relog">
       <div class="relog-card">
         <div class="relog-card-head">
-          <div class="relog-version"><span class="v">v0.7.0</span><span class="latest">latest</span></div>
+          <div class="relog-version"><span class="v">v0.7.1</span><span class="latest">latest</span></div>
+          <div class="relog-date">Jul 23, 2026</div>
+        </div>
+        <div class="relog-body">
+          <div class="relog-section">
+            <h4>Fixed</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div><b>Bambu printers now show up in the menu-bar app.</b> Pairing only probed for Bambu when an "I have Bambu Lab printers" checkbox was ticked — and it defaulted to off, so pasting a token registered your Klipper printers and silently skipped every Bambu. The probe is now unconditional and the checkbox is gone.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div><b>Scanning no longer discards Bambu printers.</b> They're reported separately (they need an access code before linking) and the scan list was only reading the Moonraker results, so a discovered Bambu was dropped before it reached the screen.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="relog-card">
+        <div class="relog-card-head">
+          <div class="relog-version"><span class="v">v0.7.0</span></div>
           <div class="relog-date">Jul 23, 2026</div>
         </div>
         <div class="relog-body">
@@ -1126,7 +1142,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
 <!-- ═══════════════ FOOTER ═══════════════ -->
 <footer class="footer">
   <div class="wrap foot-row">
-    <span>© 2026 Spoolr · Connect v0.7.0 · MIT</span>
+    <span>© 2026 Spoolr · Connect v0.7.1 · MIT</span>
     <span class="foot-status"><span class="dot dot-green"></span><a href="https://github.com/kurenn/printer-connector">github.com/kurenn/printer-connector</a></span>
     <div class="links">
       <a href="https://www.spoolr.io/">Home</a>

@@ -7,6 +7,24 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-23
+
+### Fixed
+- **Bambu printers never appeared in the menu-bar app**, even though the
+  connector could discover them. Two independent causes, either of which hid
+  them on its own:
+  - Pairing only probed for Bambu when an **"I have Bambu Lab printers"
+    checkbox was ticked**, and it defaulted to off. Pasting a token and
+    clicking Connect — including after tapping "Pair" on a scanned printer,
+    which routes through the same screen — registered Klipper printers and
+    silently skipped every Bambu. The probe is now unconditional; the checkbox
+    is gone. It existed because Bambu discovery used to be a slow SSDP listen
+    that a running slicer could block, which the v0.7.0 TLS sweep fixed.
+  - **Scanning discarded discovered Bambu printers.** The helper reports them
+    under their own `bambu` key (they need an access code before they can be
+    linked) and the scan handler only read `printers`, so a Bambu was found and
+    then dropped before it reached the list.
+
 ## [0.7.0] - 2026-07-23
 
 The first release validated against real Bambu Lab hardware (an A1 mini on

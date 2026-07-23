@@ -79,3 +79,66 @@ final class FleetModelTests: XCTestCase {
         XCTAssertEqual(FleetModel.unlinkedDiscoveries(hits, linkedHosts: []).count, 1)
     }
 }
+
+// MARK: - Bambu visibility
+//
+// A scan used to drop discovered Bambu printers on the floor: the helper
+// reports them under their own `bambu` key (they need an access code before
+// they can be linked) and the scan handler only read `printers`. These cover
+// the mapping that now surfaces them.
+
+extension FleetModelTests {
+
+    private func bambuHit(host: String = "192.168.68.78",
+                          serial: String = "0300CA612001784",
+                          model: String = "",
+                          name: String = "Bambu Lab printer") -> DiscoveryService.BambuHit {
+        // Decoded rather than constructed so the test also pins the wire shape.
+        let json = """
+        {"host":"\(host)","serial":"\(serial)","model":"\(model)","name":"\(name)"}
+        """
+        return try! JSONDecoder().decode(DiscoveryService.BambuHit.self,
+                                         from: Data(json.utf8))
+    }
+
+    func testBambuHitBecomesADiscoveredPrinter() {
+        let d = FleetModel.discovered(fromBambu: bambuHit(model: "P1S"))
+        XCTAssertEqual(d.kind, .bambu)
+        XCTAssertEqual(d.host, "192.168.68.78")
+        XCTAssertEqual(d.detail, "Bambu Lab · P1S · 192.168.68.78")
+    }
+
+    /// A printer found by its TLS certificate reports no model — the detail line
+    /// must fall back to the serial instead of rendering a dangling separator.
+    func testBambuDetailFallsBackToSerialWhenModelUnknown() {
+        let d = FleetModel.discovered(fromBambu: bambuHit(model: ""))
+        XCTAssertEqual(d.detail, "Bambu Lab · 0300CA612001784 · 192.168.68.78")
+        XCTAssertFalse(d.detail.contains("·  ·"), "no empty segment in the detail line")
+    }
+
+    /// Two printers on the same host must stay distinct, and a Bambu is keyed by
+    /// serial (it has no Moonraker port to key on).
+    func testBambuIdIsKeyedBySerial() {
+        let a = FleetModel.discovered(fromBambu: bambuHit(serial: "AAA"))
+        let b = FleetModel.discovered(fromBambu: bambuHit(serial: "BBB"))
+        XCTAssertNotEqual(a.id, b.id)
+        XCTAssertEqual(a.id, "bambu:AAA")
+    }
+
+    /// Bambu rows go through the same already-linked filter as Moonraker rows,
+    /// so a rescan doesn't re-offer a printer you've added.
+    func testLinkedBambuIsHiddenOnRescan() {
+        let d = FleetModel.discovered(fromBambu: bambuHit())
+        let kept = FleetModel.unlinkedDiscoveries([d], linkedHosts: [])
+        let hidden = FleetModel.unlinkedDiscoveries([d], linkedHosts: ["192.168.68.78"])
+        XCTAssertEqual(kept.count, 1)
+        XCTAssertTrue(hidden.isEmpty)
+    }
+
+    /// An empty name (possible from a sparse beacon) still renders something
+    /// identifiable rather than a blank row.
+    func testBambuWithNoNameGetsAFallbackLabel() {
+        let d = FleetModel.discovered(fromBambu: bambuHit(name: ""))
+        XCTAssertEqual(d.name, "Bambu Lab printer")
+    }
+}
