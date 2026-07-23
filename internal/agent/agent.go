@@ -580,10 +580,10 @@ func (a *Agent) handleWebcamRequest(ctx context.Context, req cloud.WebcamRequest
 		return a.cloud.UploadWebcamSnapshot(ctx, req.ID, req.PrinterID, nil, "application/json")
 	}
 
-	// Fetch snapshot from Moonraker
+	// Fetch snapshot from the printer
 	imageData, contentType, err := moon.GetWebcamSnapshot(ctx)
 	if err != nil {
-		a.log.Warn("failed to fetch webcam snapshot from moonraker",
+		a.log.Warn("failed to fetch webcam snapshot from printer",
 			"printer_id", req.PrinterID,
 			"error", err,
 		)

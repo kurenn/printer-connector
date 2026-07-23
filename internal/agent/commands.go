@@ -19,6 +19,26 @@ import (
 	"printer-connector/internal/util"
 )
 
+// capabilityGated lists the command actions a driver advertises through
+// Capabilities(). An action absent from this map is performed by the agent
+// itself rather than by the printer (fetch_gcode pulls from the printer's file
+// API and uploads to the cloud), so it isn't gated on driver support.
+var capabilityGated = map[string]bool{
+	"pause": true, "resume": true, "cancel": true, "start_print": true,
+	"homing": true, "upload_file": true, "delete_file": true,
+	"sync_files": true, "import_history": true, "create_backup": true,
+}
+
+// supports reports whether the driver advertises the action.
+func supports(d driver.Driver, action string) bool {
+	for _, c := range d.Capabilities() {
+		if c == action {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 	cmds, err := a.cloud.GetCommands(ctx, a.cfg.ConnectorID, 20)
 	if err != nil {
@@ -38,6 +58,26 @@ func (a *Agent) pollAndExecuteCommands(ctx context.Context) error {
 				Status:       "failed",
 				ErrorMessage: fmt.Sprintf("unknown printer_id %d", cmd.PrinterID),
 				Result:       map[string]any{"printer_id": cmd.PrinterID},
+			})
+			continue
+		}
+
+		// Refuse actions the driver doesn't advertise. Driver.Capabilities is
+		// documented as the gate for exactly this, but nothing enforced it, so
+		// the agent attempted every action and surfaced a protocol-specific
+		// failure instead — a Bambu printer sent import_history reported
+		// "failed to fetch history: action not supported", which reads as a
+		// malfunction rather than a control the printer simply doesn't offer.
+		if capabilityGated[cmd.Action] && !supports(mc, cmd.Action) {
+			a.log.Info("command rejected: unsupported by printer",
+				"command_id", cmd.ID, "printer_id", cmd.PrinterID, "action", cmd.Action)
+			a.completeCommand(ctx, cmd.ID, cloud.CommandCompleteRequest{
+				Status:       "failed",
+				ErrorMessage: fmt.Sprintf("printer does not support %q", cmd.Action),
+				Result: map[string]any{
+					"action":    cmd.Action,
+					"supported": mc.Capabilities(),
+				},
 			})
 			continue
 		}
@@ -174,9 +214,9 @@ func (a *Agent) executeUploadFile(ctx context.Context, mc driver.Driver, cmd clo
 	result["filename"] = filename
 	result["size"] = len(content)
 
-	// Upload to Moonraker
+	// Upload to the printer
 	if err := mc.UploadFile(ctx, filename, content); err != nil {
-		return fmt.Errorf("failed to upload file to moonraker: %w", err)
+		return fmt.Errorf("failed to upload file to printer: %w", err)
 	}
 
 	a.log.Info("file uploaded", "command_id", cmd.ID, "filename", filename, "size", len(content))
@@ -212,7 +252,7 @@ func (a *Agent) executeUploadFileFromURL(ctx context.Context, mc driver.Driver, 
 	defer f.Close()
 
 	if err := mkr.UploadFileReader(ctx, filename, f, printFlag); err != nil {
-		return fmt.Errorf("failed to upload file to moonraker: %w", err)
+		return fmt.Errorf("failed to upload file to printer: %w", err)
 	}
 
 	result["filename"] = filename
@@ -252,9 +292,9 @@ func (a *Agent) executeDeleteFile(ctx context.Context, mc driver.Driver, cmd clo
 
 	result["filename"] = filename
 
-	// Delete from Moonraker
+	// Delete from the printer
 	if err := mc.DeleteFile(ctx, filename); err != nil {
-		return fmt.Errorf("failed to delete file from moonraker: %w", err)
+		return fmt.Errorf("failed to delete file from printer: %w", err)
 	}
 
 	a.log.Info("file deleted", "command_id", cmd.ID, "filename", filename)
@@ -262,10 +302,10 @@ func (a *Agent) executeDeleteFile(ctx context.Context, mc driver.Driver, cmd clo
 }
 
 func (a *Agent) executeSyncFiles(ctx context.Context, mc driver.Driver, cmd cloud.Command, result map[string]any) error {
-	// Fetch files list from Moonraker
+	// Fetch the file list from the printer
 	files, err := mc.ListFiles(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to list files from moonraker: %w", err)
+		return fmt.Errorf("failed to list files from printer: %w", err)
 	}
 
 	result["files"] = files
@@ -282,10 +322,10 @@ func (a *Agent) executeImportHistory(ctx context.Context, mc driver.Driver, cmd 
 		limit = int(limitParam)
 	}
 
-	// Fetch history from Moonraker
+	// Fetch history from the printer
 	history, err := mc.GetHistory(ctx, limit)
 	if err != nil {
-		return fmt.Errorf("failed to fetch history from moonraker: %w", err)
+		return fmt.Errorf("failed to fetch history from printer: %w", err)
 	}
 
 	result["history"] = history
