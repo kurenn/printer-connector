@@ -129,6 +129,8 @@ func TestSequenceIDIncrementsPerCommand(t *testing.T) {
 func TestStartPrintPublishesProjectFile(t *testing.T) {
 	ft := &fakeTransport{connected: true}
 	c := clientWith(ft, nil)
+	// A directory-qualified path (as ListFiles returns) must reach the printer
+	// intact — its files live under /cache and /model, not at the FTP root.
 	if err := c.StartPrint(context.Background(), "models/benchy.3mf"); err != nil {
 		t.Fatalf("StartPrint: %v", err)
 	}
@@ -136,8 +138,8 @@ func TestStartPrintPublishesProjectFile(t *testing.T) {
 	if p["command"] != "project_file" {
 		t.Errorf("command = %v, want project_file", p["command"])
 	}
-	if p["url"] != "ftp:///benchy.3mf" {
-		t.Errorf("url = %v, want ftp:///benchy.3mf", p["url"])
+	if p["url"] != "ftp:///models/benchy.3mf" {
+		t.Errorf("url = %v, want ftp:///models/benchy.3mf", p["url"])
 	}
 	if p["subtask_name"] != "benchy" {
 		t.Errorf("subtask_name = %v, want benchy", p["subtask_name"])
