@@ -104,8 +104,11 @@ func TestControlCommandsPublishToRequestTopic(t *testing.T) {
 			if ft.topics[0] != "device/01ABC/request" {
 				t.Errorf("topic = %q, want device/01ABC/request", ft.topics[0])
 			}
-			if ft.qos[0] != 1 {
-				t.Errorf("qos = %d, want 1", ft.qos[0])
+			// QoS 0: Bambu never PUBACKs QoS-1 control publishes, which made every
+			// command return a phantom timeout even when honored (verified on an
+			// A1 mini). See publishPrint.
+			if ft.qos[0] != 0 {
+				t.Errorf("qos = %d, want 0", ft.qos[0])
 			}
 			if got := decodePrint(t, ft.payloads[0])["command"]; got != tc.command {
 				t.Errorf("command = %v, want %q", got, tc.command)

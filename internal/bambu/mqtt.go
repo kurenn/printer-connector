@@ -28,12 +28,16 @@ type transport interface {
 }
 
 const (
-	mqttPort        = "8883"
-	mqttUser        = "bblp"
-	connectTimeout  = 6 * time.Second
-	publishTimeout  = 5 * time.Second
-	mqttKeepAliveS  = 30
-	subscribeQoS    = byte(0)
+	mqttPort       = "8883"
+	mqttUser       = "bblp"
+	connectTimeout = 6 * time.Second
+	publishTimeout = 5 * time.Second
+	mqttKeepAliveS = 30
+	subscribeQoS   = byte(0)
+	// controlQoS is QoS 0 because Bambu's broker does not PUBACK QoS-1 publishes
+	// on the request topic; see publishPrint. Named separately from subscribeQoS
+	// to make the control-path choice explicit.
+	controlQoS      = byte(0)
 	disconnectGrace = 250 // ms
 )
 
