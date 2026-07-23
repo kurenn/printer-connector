@@ -7,6 +7,71 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-23
+
+The first release validated against real Bambu Lab hardware (an A1 mini on
+firmware 01.08.01.00). Bambu support previously existed but had never run
+against a physical printer; every fix below was reproduced and verified on one.
+
+**If you run a Bambu printer, this release is the difference between "no
+printers found" and a working integration.**
+
+### Added
+- **Homebrew install for macOS** — `brew install --cask kurenn/tap/spoolr-connect`.
+  Like `install-macos.sh`, the cask clears the download quarantine, so there's
+  no Gatekeeper prompt; `brew upgrade` and `brew uninstall --zap` manage it.
+- **TLS-certificate sweep for Bambu discovery**, alongside the existing SSDP
+  listener. Every Bambu answers MQTT/TLS on `:8883` with a certificate whose
+  subject is the printer serial, so printers are found without an access code
+  and without cooperation from any slicer.
+- Bambu telemetry now carries the **printer model and module firmware
+  versions** (a `get_version` request is issued on connect).
+
+### Changed
+- `job.elapsed_s` is now **optional** in the canonical telemetry contract.
+  Drivers that cannot report elapsed time omit it instead of publishing `0`.
+- Bambu control commands publish at **QoS 0** (see Fixed).
+- Command failures on shared code paths no longer name Moonraker when the
+  printer is a Bambu.
+
+### Fixed
+- **Bambu printers were undiscoverable whenever a slicer was running.**
+  Bambu Studio and Orca bind the SSDP port (UDP `:2021`) without
+  `SO_REUSEPORT`, so the connector's listener could not start — and the bind
+  error was swallowed, making a permanent failure look identical to "no
+  printers on this network". Most Bambu owners run a slicer, so onboarding was
+  blind for exactly the users it targeted. The TLS sweep now finds them
+  regardless, and a degraded SSDP path is reported rather than hidden.
+- **Remote control of a Bambu never worked.** Control commands were published
+  at QoS 1, which Bambu's broker never acknowledges, so every command blocked
+  the full publish timeout and reported failure — even when the printer had
+  obeyed. Publishing at QoS 0 (what the printer expects, and what the driver's
+  own working requests already used) fixes it.
+- **`start_print` always failed on Bambu** with `print_error 0x0500C010`. The
+  firmware verifies the 3MF's md5 before printing and the driver was sending an
+  empty one. `StartPrint` now streams the file back over FTP, hashes it, and
+  includes the digest.
+- **Bambu file listings were always empty.** Only the FTP root was listed, and
+  on real firmware the root holds nothing but directories — prints live under
+  `/cache` and the factory samples under `/model`. Listings now cover all
+  three, and the returned paths work with `start_print` and `delete_file`.
+- **Open-frame Bambu models reported a chamber temperature they cannot
+  measure.** An A1 mini publishes a fixed `chamber_temper` of 5 whether it is
+  mid-print at 65 °C or cooling to ambient; that placeholder is no longer
+  forwarded as a reading.
+- **The agent ran commands the printer doesn't support.** `Driver.Capabilities`
+  was documented as the gate for remote commands but nothing enforced it, so an
+  unsupported action reached the driver and surfaced a confusing
+  protocol-specific error. Unsupported actions are now refused up front with
+  the printer's supported actions attached.
+
+### Notes
+- **Bambu remote control requires the printer in LAN Only Mode.** A
+  cloud-bound Bambu accepts LAN telemetry but silently ignores LAN control
+  commands, at any QoS — verified on hardware. Monitoring (discovery,
+  telemetry, status, file listings) works in either mode; only pause / resume /
+  cancel / start need LAN Only Mode.
+
 ## [0.6.0] - 2026-05-29
 
 ### Added
