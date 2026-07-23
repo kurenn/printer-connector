@@ -81,7 +81,11 @@ func getVersionRequest() []byte {
 // filename may be a bare name (a file ftpsUpload placed at the root) or a
 // directory-qualified path as returned by ListFiles (e.g. /cache/x.3mf), since
 // the printer's own files live in subdirectories rather than the root.
-func projectFileRequest(seq int64, filename string) []byte {
+//
+// fileMD5 is the hex md5 of the 3MF, which the firmware verifies before printing
+// (an empty md5 was rejected with print_error 0x0500C010). StartPrint computes
+// it from the file on the printer.
+func projectFileRequest(seq int64, filename, fileMD5 string) []byte {
 	abs := printerPath(filename)
 	name := path.Base(abs)
 	subtask := strings.TrimSuffix(name, path.Ext(name))
@@ -107,7 +111,7 @@ func projectFileRequest(seq int64, filename string) []byte {
 		ProjectID:    "0",
 		SubtaskID:    "0",
 		TaskID:       "0",
-		MD5:          "",
+		MD5:          fileMD5,
 	}
 	b, _ := json.Marshal(map[string]printCommand{"print": cmd})
 	return b

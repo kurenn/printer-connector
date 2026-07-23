@@ -48,6 +48,7 @@ type Client struct {
 	ftpUpload func(host, accessCode, filename string, content []byte) error
 	ftpDelete func(host, accessCode, filename string) error
 	ftpList   func(host, accessCode string) ([]map[string]any, error)
+	ftpMD5    func(host, accessCode, filename string) (string, error)
 
 	mu  sync.Mutex
 	tr  transport
@@ -67,6 +68,7 @@ func New(host, serial, accessCode string) *Client {
 	c.ftpUpload = ftpsUpload
 	c.ftpDelete = ftpsDelete
 	c.ftpList = ftpsList
+	c.ftpMD5 = ftpsMD5
 	return c
 }
 
@@ -164,11 +166,21 @@ func (c *Client) Cancel(ctx context.Context) error { return c.publishPrint(ctx, 
 // StartPrint prints a 3MF already uploaded to the printer (see UploadFile). The
 // remote-print flow uploads then starts; a bare start_print assumes the file is
 // present.
+//
+// The project_file command carries the 3MF's md5, which this firmware verifies
+// before printing — an empty md5 was rejected on an A1 mini with print_error
+// 0x0500C010. So we read the file back over FTP and hash it, matching what Bambu
+// Studio sends. If the file can't be read, the print would fail anyway, so the
+// md5 error is surfaced rather than swallowed.
 func (c *Client) StartPrint(ctx context.Context, filename string) error {
 	if filename == "" {
 		return errors.New("bambu: start_print requires a filename")
 	}
-	return c.publishPrint(ctx, projectFileRequest(c.next(), filename))
+	sum, err := c.ftpMD5(c.host, c.accessCode, filename)
+	if err != nil {
+		return fmt.Errorf("bambu: start_print md5 of %q: %w", filename, err)
+	}
+	return c.publishPrint(ctx, projectFileRequest(c.next(), filename, sum))
 }
 
 func (c *Client) UploadFile(ctx context.Context, filename string, content []byte) error {

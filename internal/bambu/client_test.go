@@ -51,6 +51,8 @@ func clientWith(tr transport, dialErr error) *Client {
 		}
 		return tr, nil
 	}
+	// Fake the FTP md5 fetch so StartPrint doesn't reach for a real printer.
+	c.ftpMD5 = func(_, _, _ string) (string, error) { return "deadbeef", nil }
 	return c
 }
 
@@ -150,12 +152,27 @@ func TestStartPrintPublishesProjectFile(t *testing.T) {
 	if p["param"] != "Metadata/plate_1.gcode" {
 		t.Errorf("param = %v, want Metadata/plate_1.gcode", p["param"])
 	}
+	// StartPrint fetches the file's md5 (faked here) and includes it — the
+	// firmware rejects an empty md5.
+	if p["md5"] != "deadbeef" {
+		t.Errorf("md5 = %v, want deadbeef (the fetched digest)", p["md5"])
+	}
 }
 
 func TestStartPrintRejectsEmptyFilename(t *testing.T) {
 	c := clientWith(&fakeTransport{connected: true}, nil)
 	if err := c.StartPrint(context.Background(), ""); err == nil {
 		t.Fatal("expected error for empty filename")
+	}
+}
+
+// A failed md5 fetch (unreadable file) must abort StartPrint rather than send a
+// project_file the firmware would reject.
+func TestStartPrintFailsWhenMD5Unavailable(t *testing.T) {
+	c := clientWith(&fakeTransport{connected: true}, nil)
+	c.ftpMD5 = func(_, _, _ string) (string, error) { return "", errors.New("ftp down") }
+	if err := c.StartPrint(context.Background(), "benchy.3mf"); err == nil {
+		t.Fatal("expected StartPrint to fail when md5 cannot be computed")
 	}
 }
 
