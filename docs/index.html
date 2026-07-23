@@ -214,6 +214,8 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
   background:var(--surface);border:1px solid var(--border);border-radius:12px;
   padding:22px;display:flex;flex-direction:column;gap:16px;position:relative;
   transition:border-color .12s,background .12s;
+  /* Deep links (#macos / #linux / #windows) must clear the 58px sticky nav. */
+  scroll-margin-top:78px;
 }
 .plat:hover{border-color:var(--border-hover)}
 .plat.is-recommended{border-color:color-mix(in oklab,var(--accent) 50%,var(--border) 50%);box-shadow:0 0 0 4px var(--accent-glow)}
@@ -563,7 +565,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
     <div class="plat-grid">
 
       <!-- macOS -->
-      <div class="plat is-recommended">
+      <div class="plat is-recommended" id="macos">
         <span class="plat-recommend">RECOMMENDED</span>
         <div class="plat-head">
           <div class="plat-icon">
@@ -608,7 +610,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
       </div>
 
       <!-- Linux / Pi / K1 -->
-      <div class="plat">
+      <div class="plat" id="linux">
         <div class="plat-head">
           <div class="plat-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="1"/><rect x="6" y="7" width="6" height="5"/><circle cx="16" cy="8" r="1" fill="currentColor"/><circle cx="18" cy="8" r="1" fill="currentColor"/><circle cx="16" cy="11" r="1" fill="currentColor"/><circle cx="18" cy="11" r="1" fill="currentColor"/></svg>
@@ -640,7 +642,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
       </div>
 
       <!-- Windows -->
-      <div class="plat">
+      <div class="plat" id="windows">
         <span class="plat-beta">NEW · BETA</span>
         <div class="plat-head">
           <div class="plat-icon">
