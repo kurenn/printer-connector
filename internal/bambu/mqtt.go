@@ -94,8 +94,10 @@ func (m *mqttConn) onConnect(cli mqtt.Client) {
 
 	cli.Subscribe("device/"+m.serial+"/report", subscribeQoS, m.onMessage)
 	// Seed the merged report with a full snapshot instead of waiting for the
-	// next incremental push.
+	// next incremental push, and ask which model this is — the state push alone
+	// doesn't say, and normalization depends on it.
 	cli.Publish("device/"+m.serial+"/request", subscribeQoS, false, pushAllRequest())
+	cli.Publish("device/"+m.serial+"/request", subscribeQoS, false, getVersionRequest())
 }
 
 func (m *mqttConn) onConnectionLost(_ mqtt.Client, _ error) {

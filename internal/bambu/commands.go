@@ -61,6 +61,18 @@ func pushAllRequest() []byte {
 	return b
 }
 
+// getVersionRequest asks the printer for its module/firmware list. The reply
+// arrives on the report topic under a top-level "info" key, so the deep-merged
+// report ends up carrying the printer model. Normalize needs it to tell a real
+// chamber sensor from a placeholder, and it gives the cloud firmware versions
+// for free.
+func getVersionRequest() []byte {
+	b, _ := json.Marshal(map[string]map[string]any{
+		"info": {"sequence_id": "0", "command": "get_version"},
+	})
+	return b
+}
+
 // projectFileRequest builds the command that prints a 3MF already present on
 // the printer. `param` selects the plate's sliced gcode inside the archive;
 // plate 1 is the default a single-plate slice produces. AMS is left off for
