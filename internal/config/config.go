@@ -13,7 +13,7 @@ import (
 const DefaultCloudURL = "https://www.spoolr.io"
 
 // Printer protocol types. These mirror the driver package's identifiers and the
-// print-contracts printer_telemetry.json `driver` enum (kept in sync by a test).
+// spoolr-contracts printer_telemetry.json `driver` enum (kept in sync by a test).
 const (
 	TypeMoonraker = "moonraker"
 	TypeBambu     = "bambu"
