@@ -36,9 +36,9 @@ func (b *bambuFlag) Set(v string) error {
 	return nil
 }
 
-// runDiscover sweeps the LAN for Moonraker printers AND listens for Bambu SSDP
-// beacons, printing both as JSON. Standalone (no --config); powers the menubar
-// app's "Scan network" flow.
+// runDiscover sweeps the LAN for Moonraker printers AND for Bambu printers
+// (SSDP beacons plus a TLS-certificate sweep), printing both as JSON.
+// Standalone (no --config); powers the menubar app's "Scan network" flow.
 func runDiscover() {
 	bambuOnly := false
 	for _, a := range os.Args[2:] {
@@ -51,18 +51,19 @@ func runDiscover() {
 	defer cancel()
 
 	var (
-		moon  discovery.Result
-		bambu []discovery.BambuPrinter
-		wg    sync.WaitGroup
+		moon     discovery.Result
+		bambu    []discovery.BambuPrinter
+		bambuErr error
+		wg       sync.WaitGroup
 	)
 	if bambuOnly {
-		// SSDP-only: skip the Moonraker /24 sweep (used as a fast opt-in probe
+		// Bambu-only: skip the Moonraker /24 sweep (used as a fast opt-in probe
 		// so the common Klipper flow isn't slowed by a Bambu scan it doesn't need).
-		bambu = discovery.ScanBambu(ctx, 4*time.Second)
+		bambu, bambuErr = discovery.DiscoverBambu(ctx, 4*time.Second)
 	} else {
 		wg.Add(2)
 		go func() { defer wg.Done(); moon = discovery.Scan(ctx) }()
-		go func() { defer wg.Done(); bambu = discovery.ScanBambu(ctx, 4*time.Second) }()
+		go func() { defer wg.Done(); bambu, bambuErr = discovery.DiscoverBambu(ctx, 4*time.Second) }()
 		wg.Wait()
 	}
 
@@ -72,16 +73,26 @@ func runDiscover() {
 	if moonPrinters == nil {
 		moonPrinters = []discovery.Printer{}
 	}
+	if bambu == nil {
+		bambu = []discovery.BambuPrinter{}
+	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(map[string]any{
+	out := map[string]any{
 		"hosts_total":  moon.HostsTotal,
 		"hosts_probed": moon.HostsProbed,
 		"subnets":      moon.Subnets,
 		"printers":     moonPrinters,
 		"bambu":        bambu, // need a user-entered access code before pairing
-	})
+	}
+	// Degraded SSDP is not an error for the caller — the TLS sweep still finds
+	// printers — but it must be visible so "no printers found" is diagnosable.
+	if bambuErr != nil {
+		out["bambu_ssdp_warning"] = bambuErr.Error()
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(out)
 }
 
 // runRegister discovers every Moonraker printer on the LAN and registers them

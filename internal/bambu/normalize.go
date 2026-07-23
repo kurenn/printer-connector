@@ -1,6 +1,10 @@
 package bambu
 
-import "printer-connector/internal/driver"
+import (
+	"strings"
+
+	"printer-connector/internal/driver"
+)
 
 // Normalize converts a merged Bambu Lab MQTT report into the canonical
 // telemetry shape. Bambu publishes its state under the top-level "print" key as
@@ -55,7 +59,7 @@ func Normalize(report map[string]any) driver.Telemetry {
 			Target: getFloat(p, "bed_target_temper"),
 		}
 	}
-	if hasAny(p, "chamber_temper", "chamber_target_temper") {
+	if hasAny(p, "chamber_temper", "chamber_target_temper") && hasChamberSensor(printerModel(report)) {
 		temps.Chamber = &driver.Sensor{
 			Actual: getFloat(p, "chamber_temper"),
 			Target: getFloat(p, "chamber_target_temper"),
@@ -76,6 +80,56 @@ func Normalize(report map[string]any) driver.Telemetry {
 	}
 
 	return t
+}
+
+// openFrameModels are Bambu printers with no enclosure, and therefore no
+// chamber thermistor. They still publish chamber_temper, but as a fixed
+// placeholder rather than a reading: an A1 mini reports exactly 5 whether it is
+// mid-print with the bed at 65°C or cooling down afterwards. Forwarding that
+// would show a temperature the printer never measured, so these models report
+// no chamber sensor at all — the field is optional in the contract.
+//
+// Matching is on whole tokens of the product name ("Bambu Lab A1 mini"), not
+// substrings, so "P1P" never matches a "P1S" and vice versa.
+var openFrameModels = map[string]bool{"A1": true, "P1P": true}
+
+// hasChamberSensor reports whether a model measures chamber temperature. An
+// unrecognised model is trusted: dropping a real reading is worse than passing
+// through one more placeholder, and unknown models get reported as bugs.
+func hasChamberSensor(productName string) bool {
+	if productName == "" {
+		return true
+	}
+	for _, tok := range strings.Fields(strings.ToUpper(productName)) {
+		if openFrameModels[tok] {
+			return false
+		}
+	}
+	return true
+}
+
+// printerModel pulls the product name out of the get_version reply that the
+// transport merges into the report under "info". Returns "" before the reply
+// lands (or if the printer never sends one).
+func printerModel(report map[string]any) string {
+	info := childMap(report, "info")
+	if info == nil {
+		return ""
+	}
+	modules, ok := info["module"].([]any)
+	if !ok {
+		return ""
+	}
+	for _, m := range modules {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		if name := getString(mm, "product_name"); name != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // mapState maps Bambu's gcode_state to a canonical state. PREPARE/SLICING are

@@ -407,7 +407,7 @@ struct BambuCredentialsView: View {
                                     .frame(width: 18, height: 18)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(device.name).font(Theme.sans(13, weight: .medium)).foregroundColor(Theme.text1)
-                                    Text("\(device.model) · \(device.host)").font(Theme.mono(11)).foregroundColor(Theme.text3)
+                                    Text(device.subtitle).font(Theme.mono(11)).foregroundColor(Theme.text3)
                                 }
                             }
                             TextField("access code", text: $device.accessCode)

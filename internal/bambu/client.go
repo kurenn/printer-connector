@@ -10,6 +10,15 @@
 // attaches the normalized view to each snapshot via NormalizeRaw, so the cloud —
 // which has no Klipper-style object model to read for Bambu — consumes Bambu
 // snapshots through the normalized payload.
+//
+// LAN control requires LAN Only Mode. A cloud-bound Bambu (the default, so the
+// owner keeps Bambu Handy) accepts LAN MQTT for reading telemetry but silently
+// ignores print-control commands (pause/resume/cancel/project_file) — verified
+// on an A1 mini running firmware 01.08.01.00, where every control command was
+// dropped at any QoS while all telemetry flowed normally. Switching the printer
+// to "LAN Only Mode" opens the control channel. So Bambu monitoring works out of
+// the box; Bambu *control* through the connector requires the printer in LAN
+// Only Mode. Telemetry is unaffected either way.
 package bambu
 
 import (
@@ -92,7 +101,14 @@ func (c *Client) publishPrint(ctx context.Context, payload []byte) error {
 	if err != nil {
 		return err
 	}
-	return tr.Publish(ctx, c.requestTopic(), 1, payload) // QoS 1: control commands
+	// QoS 0, not 1. Bambu's broker never sends a PUBACK for QoS-1 publishes on
+	// the request topic — verified on an A1 mini: every control command blocked
+	// the full publish timeout and returned an error even when the printer
+	// obeyed. QoS 0 is what the printer expects (it's what the seed publishes
+	// and Bambu Studio itself use) and completes immediately, so the command's
+	// success is no longer masked by a phantom timeout. Delivery is confirmed
+	// out-of-band by the next telemetry snapshot, not by an ack.
+	return tr.Publish(ctx, c.requestTopic(), controlQoS, payload)
 }
 
 // Telemetry returns the canonical view. Unlike QueryObjects it never errors on

@@ -72,6 +72,14 @@ struct BambuDevice: Identifiable, Equatable {
     var model: String
     var name: String
     var accessCode: String = ""
+
+    /// The model is only known when SSDP supplied it — the TLS sweep that finds
+    /// printers while a slicer holds the SSDP port yields just host and serial.
+    /// Fall back to the serial so the row always identifies which printer it is.
+    var subtitle: String {
+        let lead = model.isEmpty ? serial : model
+        return lead.isEmpty ? host : "\(lead) · \(host)"
+    }
 }
 
 // MARK: - Fleet model

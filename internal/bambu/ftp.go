@@ -59,8 +59,16 @@ func ftpsDelete(host, accessCode, filename string) error {
 		return err
 	}
 	defer func() { _ = conn.Quit() }()
-	return conn.Delete(path.Base(filename))
+	// Accepts a directory-qualified path from ListFiles as well as a bare name.
+	return conn.Delete(printerPath(filename))
 }
+
+// listDirs are the directories that actually hold printable files. The FTP root
+// contains *only* subdirectories on real firmware, so listing it alone always
+// returned an empty set: prints pushed from the cloud and slicer uploads land in
+// /cache, and the factory sample models live in /model. Root is still listed
+// because ftpsUpload stores there.
+var listDirs = []string{"/", "/cache", "/model"}
 
 func ftpsList(host, accessCode string) ([]map[string]any, error) {
 	conn, err := ftpsDial(host, accessCode)
@@ -69,21 +77,35 @@ func ftpsList(host, accessCode string) ([]map[string]any, error) {
 	}
 	defer func() { _ = conn.Quit() }()
 
-	entries, err := conn.List("/")
-	if err != nil {
-		return nil, err
-	}
-	files := make([]map[string]any, 0, len(entries))
-	for _, e := range entries {
-		if e.Type != ftp.EntryTypeFile {
+	files := make([]map[string]any, 0, 16)
+	var firstErr error
+	for _, dir := range listDirs {
+		entries, err := conn.List(dir)
+		if err != nil {
+			// Directory sets vary by model and firmware, so a missing one is
+			// normal — remember the error but keep walking the rest.
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
 		}
-		files = append(files, map[string]any{
-			"path":     e.Name,
-			"filename": e.Name,
-			"size":     e.Size,
-			"modified": e.Time.UTC().Format(time.RFC3339),
-		})
+		for _, e := range entries {
+			if e.Type != ftp.EntryTypeFile {
+				continue
+			}
+			files = append(files, map[string]any{
+				// Directory-qualified so StartPrint can address the file; the
+				// bare name stays available for display.
+				"path":     path.Join(dir, e.Name),
+				"filename": e.Name,
+				"size":     e.Size,
+				"modified": e.Time.UTC().Format(time.RFC3339),
+			})
+		}
+	}
+	// Only fail if every directory failed — a partial walk is still useful.
+	if len(files) == 0 && firstErr != nil {
+		return nil, firstErr
 	}
 	return files, nil
 }

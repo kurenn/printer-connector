@@ -2,8 +2,11 @@ package discovery
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +21,13 @@ const (
 	bambuSSDPPort  = 2021
 )
 
+// Discovery mechanism that surfaced a printer. Recorded so a support question
+// like "why didn't my printer show up?" is answerable from the scan output.
+const (
+	SourceSSDP = "ssdp"
+	SourceTLS  = "tls"
+)
+
 // BambuPrinter is a Bambu device seen on the LAN. AccessCode is intentionally
 // absent — discovery can't learn it.
 type BambuPrinter struct {
@@ -25,16 +35,21 @@ type BambuPrinter struct {
 	Serial string `json:"serial"`
 	Model  string `json:"model"`
 	Name   string `json:"name"`
+	Source string `json:"source,omitempty"`
 }
 
 // ScanBambu listens for Bambu SSDP beacons for the given duration and returns
-// the unique printers seen. Best-effort: returns nil (no error) if the socket
-// can't be opened, so it composes cleanly alongside the Moonraker sweep.
-func ScanBambu(ctx context.Context, listen time.Duration) []BambuPrinter {
+// the unique printers seen.
+//
+// The error is returned rather than swallowed: the common failure is a slicer
+// already holding UDP :2021, which is permanent for the life of that process
+// and would otherwise look identical to "no printers on this network". Callers
+// pair this with ScanBambuTLS, which has no such conflict.
+func ScanBambu(ctx context.Context, listen time.Duration) ([]BambuPrinter, error) {
 	addr := &net.UDPAddr{IP: net.ParseIP(bambuSSDPGroup), Port: bambuSSDPPort}
 	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("bambu ssdp: cannot listen on %s:%d (a slicer such as Bambu Studio or Orca may hold it): %w", bambuSSDPGroup, bambuSSDPPort, err)
 	}
 	defer conn.Close()
 
@@ -64,7 +79,46 @@ func ScanBambu(ctx context.Context, listen time.Duration) []BambuPrinter {
 	for _, p := range seen {
 		out = append(out, p)
 	}
-	return out
+	return out, nil
+}
+
+// DiscoverBambu finds Bambu printers by both mechanisms and merges the results.
+// SSDP is richer (it carries model and friendly name) but is often unavailable;
+// the TLS sweep always works but only yields host and serial. Running both and
+// preferring SSDP's details gives the best record of each printer.
+//
+// An SSDP failure is reported, not fatal — the TLS sweep still finds printers,
+// so the error is a diagnostic rather than a reason to return nothing.
+func DiscoverBambu(ctx context.Context, listen time.Duration) ([]BambuPrinter, error) {
+	var (
+		ssdp, viaTLS []BambuPrinter
+		ssdpErr      error
+		wg           sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() { defer wg.Done(); ssdp, ssdpErr = ScanBambu(ctx, listen) }()
+	go func() { defer wg.Done(); viaTLS = ScanBambuTLS(ctx) }()
+	wg.Wait()
+
+	// Key by serial: the same printer found both ways must appear once.
+	merged := make(map[string]BambuPrinter, len(ssdp)+len(viaTLS))
+	for _, p := range viaTLS {
+		merged[p.Serial] = p
+	}
+	for _, p := range ssdp {
+		p.Source = SourceSSDP
+		if prev, ok := merged[p.Serial]; ok && p.Host == "" {
+			p.Host = prev.Host
+		}
+		merged[p.Serial] = p // SSDP wins: it carries model and friendly name
+	}
+
+	out := make([]BambuPrinter, 0, len(merged))
+	for _, p := range merged {
+		out = append(out, p)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Host < out[j].Host })
+	return out, ssdpErr
 }
 
 // parseBambuBeacon parses an SSDP NOTIFY datagram from a Bambu printer. It is

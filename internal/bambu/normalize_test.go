@@ -138,3 +138,83 @@ func TestNormalizeProgressClamped(t *testing.T) {
 		t.Errorf("progress = %v, want clamped to 1.0", got)
 	}
 }
+
+// Open-frame models publish chamber_temper as a placeholder, not a reading.
+// Verified on an A1 mini: it reported exactly 5 both mid-print (bed 65°C) and
+// while cooling down afterwards, never varying.
+func TestChamberOmittedForOpenFrameModels(t *testing.T) {
+	reportFor := func(product string) map[string]any {
+		return map[string]any{
+			"print": map[string]any{
+				"gcode_state":    "RUNNING",
+				"chamber_temper": 5.0,
+				"nozzle_temper":  220.0,
+			},
+			"info": map[string]any{
+				"module": []any{
+					map[string]any{"name": "ota", "product_name": product},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		product     string
+		wantChamber bool
+	}{
+		{"Bambu Lab A1 mini", false},
+		{"Bambu Lab A1", false},
+		{"Bambu Lab P1P", false},
+		{"Bambu Lab P1S", true},
+		{"Bambu Lab X1 Carbon", true},
+		{"Bambu Lab X1E", true},
+		{"", true}, // model unknown (reply not yet received) — trust the value
+	}
+
+	for _, tt := range tests {
+		name := tt.product
+		if name == "" {
+			name = "unknown model"
+		}
+		t.Run(name, func(t *testing.T) {
+			got := Normalize(reportFor(tt.product))
+			if got.Temps == nil {
+				t.Fatal("Temps = nil, want temps present")
+			}
+			if hasChamber := got.Temps.Chamber != nil; hasChamber != tt.wantChamber {
+				t.Errorf("chamber present = %v, want %v", hasChamber, tt.wantChamber)
+			}
+			// The nozzle must survive regardless — gating is chamber-only.
+			if got.Temps.Nozzle == nil {
+				t.Error("nozzle sensor was dropped")
+			}
+		})
+	}
+}
+
+func TestPrinterModel(t *testing.T) {
+	tests := []struct {
+		name   string
+		report map[string]any
+		want   string
+	}{
+		{"no info key", map[string]any{"print": map[string]any{}}, ""},
+		{"info without modules", map[string]any{"info": map[string]any{}}, ""},
+		{
+			// Real A1 mini shape: the first modules carry an empty product_name.
+			name: "skips modules without a product name",
+			report: map[string]any{"info": map[string]any{"module": []any{
+				map[string]any{"name": "esp32", "product_name": ""},
+				map[string]any{"name": "ota", "product_name": "Bambu Lab A1 mini"},
+			}}},
+			want: "Bambu Lab A1 mini",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := printerModel(tt.report); got != tt.want {
+				t.Errorf("printerModel = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

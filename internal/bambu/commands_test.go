@@ -55,7 +55,7 @@ func TestPushAllRequestShape(t *testing.T) {
 
 func TestProjectFileRequestShape(t *testing.T) {
 	var env map[string]map[string]any
-	if err := json.Unmarshal(projectFileRequest(7, "deep/path/Cool Model.3mf"), &env); err != nil {
+	if err := json.Unmarshal(projectFileRequest(7, "Cool Model.3mf"), &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	p := env["print"]
@@ -66,7 +66,7 @@ func TestProjectFileRequestShape(t *testing.T) {
 		t.Errorf("sequence_id = %v, want 7", p["sequence_id"])
 	}
 	if p["url"] != "ftp:///Cool Model.3mf" {
-		t.Errorf("url = %v, want ftp:///Cool Model.3mf (basename only)", p["url"])
+		t.Errorf("url = %v, want ftp:///Cool Model.3mf", p["url"])
 	}
 	if p["subtask_name"] != "Cool Model" {
 		t.Errorf("subtask_name = %v, want 'Cool Model' (extension stripped)", p["subtask_name"])
@@ -109,5 +109,38 @@ func TestCloneMapIsIndependent(t *testing.T) {
 	src["print"].(map[string]any)["mc_percent"] = 99.0
 	if clone["print"].(map[string]any)["mc_percent"] != 10.0 {
 		t.Error("clone should not observe mutations to the source")
+	}
+}
+
+// The printer's own files live in subdirectories (/cache, /model), not at the
+// FTP root, so a path returned by ListFiles must survive into the print URL.
+// A bare name still resolves to the root, where ftpsUpload puts our uploads.
+func TestProjectFileRequestPaths(t *testing.T) {
+	tests := []struct {
+		name        string
+		filename    string
+		wantURL     string
+		wantSubtask string
+	}{
+		{"bare name resolves to root", "Benchy.3mf", "ftp:///Benchy.3mf", "Benchy"},
+		{"cache path is preserved", "/cache/3DBenchy.3mf", "ftp:///cache/3DBenchy.3mf", "3DBenchy"},
+		{"model path is preserved", "/model/Panda.gcode.3mf", "ftp:///model/Panda.gcode.3mf", "Panda.gcode"},
+		{"relative path gains a leading slash", "cache/x.3mf", "ftp:///cache/x.3mf", "x"},
+		{"name with spaces", "/cache/Speed Boat.3mf", "ftp:///cache/Speed Boat.3mf", "Speed Boat"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var env map[string]map[string]any
+			if err := json.Unmarshal(projectFileRequest(1, tt.filename), &env); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			p := env["print"]
+			if p["url"] != tt.wantURL {
+				t.Errorf("url = %v, want %v", p["url"], tt.wantURL)
+			}
+			if p["subtask_name"] != tt.wantSubtask {
+				t.Errorf("subtask_name = %v, want %v", p["subtask_name"], tt.wantSubtask)
+			}
+		})
 	}
 }

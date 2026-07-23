@@ -61,20 +61,40 @@ func pushAllRequest() []byte {
 	return b
 }
 
+// getVersionRequest asks the printer for its module/firmware list. The reply
+// arrives on the report topic under a top-level "info" key, so the deep-merged
+// report ends up carrying the printer model. Normalize needs it to tell a real
+// chamber sensor from a placeholder, and it gives the cloud firmware versions
+// for free.
+func getVersionRequest() []byte {
+	b, _ := json.Marshal(map[string]map[string]any{
+		"info": {"sequence_id": "0", "command": "get_version"},
+	})
+	return b
+}
+
 // projectFileRequest builds the command that prints a 3MF already present on
-// the printer (uploaded over FTPS to the root). `param` selects the plate's
-// sliced gcode inside the archive; plate 1 is the default a single-plate slice
-// produces. AMS is left off for v1 — AMS slot mapping is a follow-up.
+// the printer. `param` selects the plate's sliced gcode inside the archive;
+// plate 1 is the default a single-plate slice produces. AMS is left off for
+// v1 — AMS slot mapping is a follow-up.
+//
+// filename may be a bare name (a file ftpsUpload placed at the root) or a
+// directory-qualified path as returned by ListFiles (e.g. /cache/x.3mf), since
+// the printer's own files live in subdirectories rather than the root.
 func projectFileRequest(seq int64, filename string) []byte {
-	name := path.Base(filename)
+	abs := printerPath(filename)
+	name := path.Base(abs)
 	subtask := strings.TrimSuffix(name, path.Ext(name))
 	no := false
 	yes := true
 	cmd := printCommand{
-		SequenceID:   itoa(seq),
-		Command:      "project_file",
-		Param:        "Metadata/plate_1.gcode",
-		URL:          "ftp:///" + name,
+		SequenceID: itoa(seq),
+		Command:    "project_file",
+		Param:      "Metadata/plate_1.gcode",
+		// "ftp://" + an absolute path yields the triple-slash form Bambu
+		// Studio emits for root files ("ftp:///x.3mf") and addresses
+		// subdirectories correctly ("ftp:///cache/x.3mf").
+		URL:          "ftp://" + abs,
 		SubtaskName:  subtask,
 		UseAMS:       &no,
 		Timelapse:    &no,
@@ -91,4 +111,15 @@ func projectFileRequest(seq int64, filename string) []byte {
 	}
 	b, _ := json.Marshal(map[string]printCommand{"print": cmd})
 	return b
+}
+
+// printerPath normalizes a file reference to an absolute path on the printer's
+// storage. Bare names resolve to the root (where ftpsUpload puts them), keeping
+// the previous behaviour intact, while listed paths keep their directory.
+func printerPath(filename string) string {
+	f := strings.TrimSpace(filename)
+	if f == "" {
+		return "/"
+	}
+	return path.Clean("/" + f)
 }

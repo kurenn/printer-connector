@@ -28,12 +28,16 @@ type transport interface {
 }
 
 const (
-	mqttPort        = "8883"
-	mqttUser        = "bblp"
-	connectTimeout  = 6 * time.Second
-	publishTimeout  = 5 * time.Second
-	mqttKeepAliveS  = 30
-	subscribeQoS    = byte(0)
+	mqttPort       = "8883"
+	mqttUser       = "bblp"
+	connectTimeout = 6 * time.Second
+	publishTimeout = 5 * time.Second
+	mqttKeepAliveS = 30
+	subscribeQoS   = byte(0)
+	// controlQoS is QoS 0 because Bambu's broker does not PUBACK QoS-1 publishes
+	// on the request topic; see publishPrint. Named separately from subscribeQoS
+	// to make the control-path choice explicit.
+	controlQoS      = byte(0)
 	disconnectGrace = 250 // ms
 )
 
@@ -94,8 +98,10 @@ func (m *mqttConn) onConnect(cli mqtt.Client) {
 
 	cli.Subscribe("device/"+m.serial+"/report", subscribeQoS, m.onMessage)
 	// Seed the merged report with a full snapshot instead of waiting for the
-	// next incremental push.
+	// next incremental push, and ask which model this is — the state push alone
+	// doesn't say, and normalization depends on it.
 	cli.Publish("device/"+m.serial+"/request", subscribeQoS, false, pushAllRequest())
+	cli.Publish("device/"+m.serial+"/request", subscribeQoS, false, getVersionRequest())
 }
 
 func (m *mqttConn) onConnectionLost(_ mqtt.Client, _ error) {
