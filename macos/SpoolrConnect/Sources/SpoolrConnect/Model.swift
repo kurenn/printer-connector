@@ -134,10 +134,8 @@ final class FleetModel: ObservableObject {
     @Published var linkError: String?
     @Published var linkedPrinters: [Printer] = []
 
-    // Bambu onboarding: opt-in (the SSDP scan only runs when the user has Bambu
-    // printers, so the common Klipper flow isn't slowed). SSDP-found printers
-    // await a user-entered access code.
-    @Published var includeBambu = false
+    // Bambu onboarding: discovered Bambu printers await a user-entered access
+    // code (it isn't discoverable — the user reads it off the printer screen).
     @Published var bambuDiscovered: [BambuDevice] = []
 
     // Attention Mode group expansion (collapsed by default).
@@ -310,21 +308,21 @@ final class FleetModel: ObservableObject {
     }
 
     /// Paste a pairing code → discover the LAN → register everything under that
-    /// token → the web UI updates. Bambu printers (found via SSDP) need a
-    /// user-entered access code first, so we discover up front and branch to the
+    /// token → the web UI updates. Bambu printers need a user-entered access
+    /// code (it can't be discovered), so we probe up front and branch to the
     /// credentials step before the single register call.
+    ///
+    /// The probe is unconditional. It used to sit behind an "I have Bambu Lab
+    /// printers" checkbox that defaulted to off, back when Bambu discovery was a
+    /// slow, slicer-blocked SSDP listen. Discovery now also sweeps for the
+    /// printer's TLS certificate, which is quick and works while a slicer is
+    /// running — so the opt-in only served to hide printers from anyone who
+    /// didn't notice the checkbox.
     func register() {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { linkError = "Enter your pairing code."; return }
         linkError = nil
         state = .linking
-
-        // Default (Klipper) path: register straight away — no Bambu pre-scan, so
-        // no regression. Only when the user opts in do we SSDP-probe for Bambu.
-        guard includeBambu else {
-            runRegister(bambu: [])
-            return
-        }
 
         DiscoveryService.scan(bambuOnly: true) { [weak self] result in
             guard let self else { return }
@@ -399,10 +397,15 @@ final class FleetModel: ObservableObject {
                                       status: .discovered,
                                       host: hit.host)
                 }
+                // Bambu printers arrive in their own key — the discover helper
+                // reports them separately because they need an access code before
+                // they can be linked. They were previously dropped here, so a scan
+                // silently hid every Bambu on the network.
+                let bambuHits = (payload.bambu ?? []).map(Self.discovered(fromBambu:))
                 // Hide printers already linked to this connector — a rescan should
                 // surface only what's NEW, not re-offer ones you've added.
                 let linkedHosts = ConnectorConfig.load(path: AgentService.configPath())?.registeredHosts ?? []
-                self.discovered = Self.unlinkedDiscoveries(hits, linkedHosts: linkedHosts)
+                self.discovered = Self.unlinkedDiscoveries(hits + bambuHits, linkedHosts: linkedHosts)
             case .failure:
                 // No bundled helper (e.g. `swift run`) — keep the demo flowing.
                 self.scanProbed = self.scanTotal
@@ -449,6 +452,22 @@ final class FleetModel: ObservableObject {
     /// Discovered printers that aren't already linked to this connector.
     static func unlinkedDiscoveries(_ hits: [DiscoveredPrinter], linkedHosts: Set<String>) -> [DiscoveredPrinter] {
         hits.filter { !linkedHosts.contains($0.host) }
+    }
+
+    /// Turns a discovered Bambu into a row for the scan list. Discovery can't
+    /// always learn the model — a printer found by its TLS certificate reports
+    /// only host and serial — so the detail line falls back to the serial rather
+    /// than rendering a dangling separator.
+    static func discovered(fromBambu hit: DiscoveryService.BambuHit) -> DiscoveredPrinter {
+        let descriptor = hit.model.isEmpty ? hit.serial : hit.model
+        let detail = descriptor.isEmpty ? "Bambu Lab · \(hit.host)"
+                                        : "Bambu Lab · \(descriptor) · \(hit.host)"
+        return DiscoveredPrinter(id: "bambu:\(hit.serial)",
+                                 name: hit.name.isEmpty ? "Bambu Lab printer" : hit.name,
+                                 kind: .bambu,
+                                 detail: detail,
+                                 status: .discovered,
+                                 host: hit.host)
     }
 
     /// Tapping "Pair" on a discovered printer routes into the REAL token flow —
