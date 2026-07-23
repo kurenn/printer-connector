@@ -417,7 +417,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
       </div>
 
       <div class="dl-version">
-        <span class="tag">v0.6.0</span>
+        <span class="tag">v0.7.0</span>
         <span>Released May 29, 2026 ·</span>
         <a href="#changelog" style="color:var(--accent)">release notes →</a>
       </div>
@@ -481,7 +481,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
         <div class="term-body">
           <div class="term-line"><span class="term-prompt">$</span><span class="term-cmd">curl -fsSL <span style="color:var(--accent)">raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh</span> | bash</span></div>
           <div class="term-line"><span class="term-out">▸ detected: darwin/arm64 (macOS 14.5)</span></div>
-          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.6.0…</span><span class="term-ok">[ok]</span></div>
+          <div class="term-line"><span class="term-out">▸ fetching Spoolr Connect v0.7.0…</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ installing Spoolr Connect.app → /Applications</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-out">▸ launching menu-bar agent</span><span class="term-ok">[ok]</span></div>
           <div class="term-line"><span class="term-comment"># scanning your LAN for printers…</span></div>
@@ -952,7 +952,46 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
     <div class="relog">
       <div class="relog-card">
         <div class="relog-card-head">
-          <div class="relog-version"><span class="v">v0.6.0</span><span class="latest">latest</span></div>
+          <div class="relog-version"><span class="v">v0.7.0</span><span class="latest">latest</span></div>
+          <div class="relog-date">Jul 23, 2026</div>
+        </div>
+        <div class="relog-body">
+          <div class="relog-section">
+            <h4>Bambu Lab — validated on real hardware</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div><b>Bambu printers are discoverable again while a slicer is running.</b> Bambu Studio and Orca hold the SSDP port, which used to make discovery return "no printers found". A TLS-certificate sweep now finds them regardless.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div><b>Remote control of a Bambu works.</b> Commands were published at a QoS the printer never acknowledges, so every pause / resume / cancel reported failure even when it worked.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div><b><span class="mono">start_print</span> works.</b> The firmware verifies the 3MF's md5 before printing; the connector now computes and sends it.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div><b>File listings are no longer empty</b> — prints under <span class="mono">/cache</span> and factory models under <span class="mono">/model</span> are included, and those paths work for printing and deleting.</div></div>
+              <div class="relog-item"><span class="bullet bullet-fix">✓</span><div><b>No more phantom chamber temperature</b> on open-frame models (an A1 mini reports a fixed placeholder it can't measure).</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Added</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div><b>Homebrew install.</b> <span class="mono">brew install --cask kurenn/tap/spoolr-connect</span> — clears the quarantine, so no Gatekeeper prompt.</div></div>
+              <div class="relog-item"><span class="bullet bullet-add">+</span><div>Bambu telemetry now reports the <b>printer model and module firmware versions</b>.</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Changed</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-chg">~</span><div>The agent <b>refuses commands a printer doesn't support</b> instead of attempting them and returning a confusing protocol error.</div></div>
+              <div class="relog-item"><span class="bullet bullet-chg">~</span><div><span class="mono">elapsed_s</span> is optional — drivers that can't report elapsed time omit it rather than publishing a misleading <span class="mono">0</span>.</div></div>
+            </div>
+          </div>
+          <div class="relog-section">
+            <h4>Note</h4>
+            <div class="relog-list">
+              <div class="relog-item"><span class="bullet bullet-chg">~</span><div><b>Bambu remote control requires LAN Only Mode.</b> A cloud-bound Bambu accepts telemetry over the LAN but ignores control commands. Monitoring works in either mode; only pause / resume / cancel / start need the toggle.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="relog-card">
+        <div class="relog-card-head">
+          <div class="relog-version"><span class="v">v0.6.0</span></div>
           <div class="relog-date">May 29, 2026</div>
         </div>
         <div class="relog-body">
@@ -1087,7 +1126,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
 <!-- ═══════════════ FOOTER ═══════════════ -->
 <footer class="footer">
   <div class="wrap foot-row">
-    <span>© 2026 Spoolr · Connect v0.6.0 · MIT</span>
+    <span>© 2026 Spoolr · Connect v0.7.0 · MIT</span>
     <span class="foot-status"><span class="dot dot-green"></span><a href="https://github.com/kurenn/printer-connector">github.com/kurenn/printer-connector</a></span>
     <div class="links">
       <a href="https://www.spoolr.io/">Home</a>
