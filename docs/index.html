@@ -229,7 +229,9 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
 
 .install-block{
   background:#08090b;border:1px solid var(--border);border-radius:8px;
-  padding:11px 14px;font-family:var(--font-mono);font-size:12px;color:var(--text-1);
+  /* right padding reserves room for the absolutely-positioned Copy button so a
+     long first line can't run underneath it */
+  padding:11px 62px 11px 14px;font-family:var(--font-mono);font-size:12px;color:var(--text-1);
   position:relative;overflow-x:auto;line-height:1.6;
 }
 .install-block .prompt{color:var(--accent);user-select:none;margin-right:6px}
@@ -464,7 +466,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
         <div>
           <b style="color:var(--text-1);font-weight:600">First-launch security prompt is expected.</b>
-          Spoolr is open-source and ad-hoc signed (not notarized — Spoolr has no paid Apple account). Downloading the .zip in a browser quarantines it, so you'll click <span class="mono" style="color:var(--text-1)">Open Anyway</span> in <span class="mono" style="color:var(--text-1)">System Settings › Privacy &amp; Security</span>. The one-line Terminal install (right) avoids the quarantine entirely. <a href="#first-launch">Per-OS steps →</a>
+          Spoolr is open-source and ad-hoc signed (not notarized — Spoolr has no paid Apple account). Downloading the .zip in a browser quarantines it, so you'll click <span class="mono" style="color:var(--text-1)">Open Anyway</span> in <span class="mono" style="color:var(--text-1)">System Settings › Privacy &amp; Security</span>. Installing with <span class="mono" style="color:var(--text-1)">brew install --cask kurenn/tap/spoolr-connect</span> — or the one-line Terminal install (right) — clears the quarantine for you, so neither shows this prompt. <a href="#first-launch">Per-OS steps →</a>
         </div>
       </div>
     </div>
@@ -574,7 +576,13 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
         </div>
         <div class="plat-desc">A menu-bar agent that scans your LAN, lets you paste a pairing token, then runs quietly in the background. The status icon shows live printer state; <i>Open dashboard</i> jumps straight to the web app.</div>
 
-        <div class="plat-or">one-line install</div>
+        <div class="plat-or">homebrew</div>
+        <div class="install-block">
+          <button class="copy" data-copy="brew install --cask kurenn/tap/spoolr-connect">Copy</button>
+          <span class="prompt">$</span> brew install --cask kurenn/tap/spoolr-connect
+        </div>
+
+        <div class="plat-or">or one-line install</div>
         <div class="install-block">
           <button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash">Copy</button>
           <span class="prompt">$</span> curl -fsSL raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash
@@ -590,7 +598,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
 
         <div class="first-launch" id="first-launch">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
-          <div>Ad-hoc signed, not notarized. If you download the .zip in a browser, macOS shows <i>"cannot be opened"</i> — open <b>System Settings › Privacy &amp; Security</b> and click <b>Open Anyway</b>. The curl install above avoids this entirely.</div>
+          <div>Ad-hoc signed, not notarized. If you download the .zip in a browser, macOS shows <i>"cannot be opened"</i> — open <b>System Settings › Privacy &amp; Security</b> and click <b>Open Anyway</b>. The Homebrew cask and the curl install above both clear the quarantine for you, so neither shows this prompt.</div>
         </div>
 
         <div class="plat-foot">

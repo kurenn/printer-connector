@@ -39,7 +39,7 @@
 - 🚀 **Send g-code** straight from a browser-side slicer to the printer
 - 🔔 **Get push notifications** for print start, completion, and failures
 
-It runs as a background service, a macOS menu-bar app, or a one-line shell installer — **whichever fits the machine you put it on**.
+It runs as a background service, a macOS menu-bar app (installable with `brew install --cask kurenn/tap/spoolr-connect`), or a one-line shell installer — **whichever fits the machine you put it on**.
 
 ---
 
@@ -205,16 +205,29 @@ sudo sh install-k1.sh
 The **Spoolr Connect** menu-bar app (universal, Apple Silicon + Intel) is both the
 installer *and* the day-to-day dashboard — it scans your LAN, pairs your fleet,
 runs the agent in the background, and surfaces live status without ever needing a
-terminal. Install with **one command** (no security prompt this way):
+terminal.
+
+**Homebrew (recommended):**
+
+```bash
+brew install --cask kurenn/tap/spoolr-connect
+```
+
+Upgrades and removal are then just `brew upgrade --cask spoolr-connect` and
+`brew uninstall --zap --cask spoolr-connect` (`--zap` also clears your pairing in
+`~/Library/Application Support/Spoolr`).
+
+**Or the one-line installer:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kurenn/printer-connector/main/install-macos.sh | bash
 ```
 
-The app is ad-hoc signed (not notarized — Spoolr has no paid Apple account), so a
-browser download instead shows a one-time Gatekeeper prompt. See
-**[docs/INSTALL-macOS.md](docs/INSTALL-macOS.md)** for the download/"Open Anyway"
-flow and build-from-source instructions.
+The app is ad-hoc signed (not notarized — Spoolr has no paid Apple account).
+**Both** the Homebrew cask and the install script clear the download quarantine
+for you, so neither shows a Gatekeeper prompt; only a manual browser download of
+the `.zip` does. See **[docs/INSTALL-macOS.md](docs/INSTALL-macOS.md)** for that
+"Open Anyway" flow and build-from-source instructions.
 
 **What the popover shows (left-click the menu-bar icon):**
 
@@ -420,7 +433,20 @@ To see what version you're currently running:
 
 To completely remove Printer Connector from your system:
 
-### Simple Uninstall
+### macOS (Homebrew)
+
+If you installed the menu-bar app with Homebrew:
+
+```bash
+brew uninstall --cask spoolr-connect          # removes the app
+brew uninstall --zap --cask spoolr-connect    # also clears pairing + preferences
+```
+
+Plain `uninstall` leaves `~/Library/Application Support/Spoolr/connector.json`, so
+reinstalling keeps you paired. `--zap` removes it, along with the app's
+preferences and cache — use it when you want a genuinely clean slate.
+
+### Simple Uninstall (Linux / Raspberry Pi / K1)
 
 ```bash
 # Download the uninstaller
