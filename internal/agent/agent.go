@@ -257,6 +257,15 @@ func (a *Agent) Run(ctx context.Context) error {
 	// is pushed within the threshold after boot, that is itself a stall.
 	a.lastSnapshotPushUnix.Store(time.Now().UnixNano())
 
+	// Open printer sessions now rather than on the first snapshot. Drivers that
+	// connect lazily need a moment before they can answer: Bambu dials MQTT, then
+	// waits for the printer's first pushed report, which takes longer than the
+	// gap before the first snapshot cycle. That cycle would query too early, skip
+	// the printer, and push a batch without it — so a Bambu read as offline in
+	// the cloud for a full cycle after every agent start (and, when the agent was
+	// restarted repeatedly, indefinitely).
+	go a.warmUpDrivers(ctx)
+
 	// Each loop is supervised: a panic or unexpected return is recovered, logged
 	// loudly, and the loop restarted, so one faulting loop can neither vanish
 	// silently nor crash the sibling loops (heartbeat, commands, webcam).
@@ -574,10 +583,26 @@ func (a *Agent) processWebcamRequests(ctx context.Context) error {
 }
 
 func (a *Agent) handleWebcamRequest(ctx context.Context, req cloud.WebcamRequest) error {
-	// Find the moonraker client for this printer
+	// Find the driver for this printer
 	moon := a.driverFor(req.PrinterID)
 	if moon == nil {
 		return a.cloud.UploadWebcamSnapshot(ctx, req.ID, req.PrinterID, nil, "application/json")
+	}
+
+	// Refuse before touching the driver. A printer whose Capabilities() omits
+	// "webcam" (Bambu's camera is a model-specific stream, not an HTTP snapshot)
+	// would fail on every request, logging a driver error and an ERROR for the
+	// request each time the cloud re-issued it. Mark it failed so the cloud stops
+	// re-queueing, and report it as handled rather than as a processing error —
+	// the printer simply doesn't offer the feature.
+	if !supports(moon, "webcam") {
+		a.log.Info("webcam request rejected: unsupported by printer",
+			"request_id", req.ID.String(), "printer_id", req.PrinterID)
+		if markErr := a.cloud.MarkWebcamRequestFailed(ctx, req.ID, "printer does not support webcam"); markErr != nil {
+			a.log.Warn("failed to mark webcam request as failed",
+				"request_id", req.ID.String(), "error", markErr)
+		}
+		return nil
 	}
 
 	// Fetch snapshot from the printer
@@ -626,4 +651,39 @@ func getLocalIP() string {
 		}
 	}
 	return ""
+}
+
+// warmUpDrivers opens each printer's session concurrently at startup.
+//
+// Telemetry is the right call here: unlike QueryObjects it never errors on an
+// unreachable printer, so a printer that's simply off doesn't produce noise —
+// and for lazily-connecting drivers the call is what triggers the dial and the
+// initial state request, which is the whole point. The result is discarded; only
+// the connection it establishes matters.
+func (a *Agent) warmUpDrivers(ctx context.Context) {
+	var wg sync.WaitGroup
+	for id, d := range a.driversSnapshot() {
+		wg.Add(1)
+		go func(id int, d driver.Driver) {
+			defer wg.Done()
+			wctx, cancel := context.WithTimeout(ctx, defaultPollTimeout)
+			defer cancel()
+			if _, err := d.Telemetry(wctx); err != nil {
+				a.log.Debug("driver warm-up did not complete", "printer_id", id, "error", err)
+			}
+		}(id, d)
+	}
+	wg.Wait()
+}
+
+// driversSnapshot copies the driver map so warm-up can range over it without
+// holding the lock for the duration of the connections.
+func (a *Agent) driversSnapshot() map[int]driver.Driver {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make(map[int]driver.Driver, len(a.drivers))
+	for id, d := range a.drivers {
+		out[id] = d
+	}
+	return out
 }

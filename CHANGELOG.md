@@ -7,6 +7,30 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-24
+
+### Fixed
+- **A second agent could run alongside the first.** The menu-bar app only ever
+  tracked the agent process *it* spawned, and its start path checked that same
+  reference — so an agent orphaned by a previous launch (relaunch, crash, or an
+  upgrade underneath a running app) survived, and a new one started beside it.
+  Both then polled the same connector. The app now clears any stray agent before
+  starting one, and on stop.
+- **A newly-added Bambu printer read as offline for a cycle after every agent
+  start.** Drivers that connect lazily need a moment before they can answer —
+  Bambu dials MQTT and then waits for the printer's first pushed report, which
+  takes longer than the gap before the first snapshot cycle. That cycle queried
+  too early and pushed a batch without the printer. Sessions are now opened at
+  startup, so the first batch includes them. Combined with the duplicate-agent
+  bug above (each restart reset the session), a Bambu could appear stuck offline
+  rather than correcting itself after one cycle.
+- **Webcam requests were sent to printers that don't support webcam.** The
+  snapshot path called the driver without consulting `Capabilities()`, so a
+  Bambu — whose camera is a model-specific stream rather than an HTTP snapshot —
+  failed on every request and logged an error each time the cloud re-issued it.
+  Unsupported requests are now refused up front and marked failed so the cloud
+  stops re-queueing them. (The MJPEG stream path already skipped them.)
+
 ## [0.8.0] - 2026-07-23
 
 ### Added
