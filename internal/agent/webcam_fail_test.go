@@ -20,7 +20,10 @@ import (
 // no-ops that satisfy the driver.Driver interface.
 type failingDriver struct{ err error }
 
-func (f *failingDriver) Capabilities() []string { return nil }
+// Advertises webcam so the snapshot path is actually reached: handleWebcamRequest
+// refuses a printer whose Capabilities() omits it before ever calling the driver,
+// and this fixture exists to exercise the *runtime* failure that comes after.
+func (f *failingDriver) Capabilities() []string { return []string{"webcam"} }
 func (f *failingDriver) Telemetry(_ context.Context) (driver.Telemetry, error) {
 	return driver.Telemetry{}, nil
 }

@@ -3,11 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/config"
@@ -181,5 +183,165 @@ func TestGatingKeysOffCapabilitiesNotType(t *testing.T) {
 func TestAgentLevelActionIsNotCapabilityGated(t *testing.T) {
 	if capabilityGated["fetch_gcode"] {
 		t.Error("fetch_gcode must not be capability-gated — no driver advertises it")
+	}
+}
+
+// MARK: webcam gating
+//
+// The webcam SNAPSHOT path called the driver without consulting Capabilities(),
+// so a Bambu — whose camera is a model-specific stream rather than an HTTP
+// snapshot — failed on every request and logged an error each time the cloud
+// re-issued it.
+
+// webcamDriver records whether the snapshot was attempted.
+type webcamDriver struct {
+	capDriver
+	mu        sync.Mutex
+	attempted bool
+}
+
+func (w *webcamDriver) GetWebcamSnapshot(_ context.Context) ([]byte, string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.attempted = true
+	return []byte("jpg"), "image/jpeg", nil
+}
+
+func TestWebcamRequestIsRefusedWhenUnsupported(t *testing.T) {
+	var (
+		mu         sync.Mutex
+		markedFail bool
+		uploaded   bool
+	)
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	mux.HandleFunc("/api/v1/webcam_requests/77/fail", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		markedFail = true
+		mu.Unlock()
+		_, _ = io.WriteString(w, `{}`)
+	})
+	mux.HandleFunc("/api/v1/webcam_requests/77/upload", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		uploaded = true
+		mu.Unlock()
+		_, _ = io.WriteString(w, `{}`)
+	})
+
+	d := &webcamDriver{capDriver: capDriver{caps: []string{"pause", "resume"}}} // no webcam
+	a := &Agent{
+		log:     discardLogger(),
+		cfg:     &config.Config{ConnectorID: "1", Printers: []config.Printer{{PrinterID: 1}}},
+		drivers: map[int]driver.Driver{1: d},
+		cloud:   cloud.New(cloud.Options{BaseURL: srv.URL, ConnectorID: "1", Logger: discardLogger()}),
+	}
+
+	err := a.handleWebcamRequest(context.Background(),
+		cloud.WebcamRequest{ID: cloud.StringOrNumber("77"), PrinterID: 1})
+
+	// Handled, not a processing error — the printer just doesn't offer webcam.
+	if err != nil {
+		t.Errorf("expected the request to be handled, got error: %v", err)
+	}
+	d.mu.Lock()
+	attempted := d.attempted
+	d.mu.Unlock()
+	if attempted {
+		t.Error("the driver's webcam snapshot must not be attempted when unsupported")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !markedFail {
+		t.Error("the request must be marked failed so the cloud stops re-queueing it")
+	}
+	if uploaded {
+		t.Error("nothing should be uploaded for an unsupported webcam request")
+	}
+}
+
+// A printer that does advertise webcam must still be served.
+func TestWebcamRequestProceedsWhenSupported(t *testing.T) {
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	mux.HandleFunc("/api/v1/webcam_requests/78/upload", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{}`)
+	})
+
+	d := &webcamDriver{capDriver: capDriver{caps: []string{"webcam"}}}
+	a := &Agent{
+		log:     discardLogger(),
+		cfg:     &config.Config{ConnectorID: "1", Printers: []config.Printer{{PrinterID: 1}}},
+		drivers: map[int]driver.Driver{1: d},
+		cloud:   cloud.New(cloud.Options{BaseURL: srv.URL, ConnectorID: "1", Logger: discardLogger()}),
+	}
+	if err := a.handleWebcamRequest(context.Background(),
+		cloud.WebcamRequest{ID: cloud.StringOrNumber("78"), PrinterID: 1}); err != nil {
+		t.Fatalf("handleWebcamRequest: %v", err)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if !d.attempted {
+		t.Error("a webcam-capable printer should have its snapshot fetched")
+	}
+}
+
+// MARK: driver warm-up
+//
+// Lazily-connecting drivers (Bambu dials MQTT, then waits for the printer's
+// first pushed report) couldn't answer the first snapshot cycle, so the batch
+// went out without them and the cloud read the printer as offline for a cycle —
+// indefinitely if the agent kept restarting.
+
+// countingDriver records how many times Telemetry was called.
+type countingDriver struct {
+	capDriver
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *countingDriver) Telemetry(_ context.Context) (driver.Telemetry, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	return driver.Telemetry{}, nil
+}
+
+func TestWarmUpOpensEveryDriverSession(t *testing.T) {
+	d1 := &countingDriver{}
+	d2 := &countingDriver{}
+	a := &Agent{
+		log:     discardLogger(),
+		cfg:     &config.Config{ConnectorID: "1"},
+		drivers: map[int]driver.Driver{1: d1, 2: d2},
+	}
+
+	a.warmUpDrivers(context.Background())
+
+	for i, d := range []*countingDriver{d1, d2} {
+		d.mu.Lock()
+		calls := d.calls
+		d.mu.Unlock()
+		if calls != 1 {
+			t.Errorf("driver %d: Telemetry called %d times, want exactly 1", i+1, calls)
+		}
+	}
+}
+
+// Warm-up must not hang or panic when a printer is simply unreachable — an
+// offline printer at startup shouldn't hold up the loops.
+func TestWarmUpToleratesFailingDrivers(t *testing.T) {
+	a := &Agent{
+		log:     discardLogger(),
+		cfg:     &config.Config{ConnectorID: "1"},
+		drivers: map[int]driver.Driver{1: &failingDriver{err: errors.New("unreachable")}},
+	}
+	done := make(chan struct{})
+	go func() { a.warmUpDrivers(context.Background()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("warm-up hung on an unreachable printer")
 	}
 }
