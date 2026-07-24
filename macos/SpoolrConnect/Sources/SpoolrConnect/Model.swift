@@ -204,6 +204,7 @@ final class FleetModel: ObservableObject {
     /// deferred agent-seam work; until then they read as idle (a calm
     /// placeholder) — the web dashboard has the real live state.
     func applyPaired(_ config: ConnectorConfig) {
+        isPaired = true // booting against real connector credentials
         if let ws = config.workspace { workspace = ws }
         cloudURL = config.cloudURL
         printers = config.printers.map { p in
@@ -344,6 +345,17 @@ final class FleetModel: ObservableObject {
         }
     }
 
+    /// Submit the entered Bambu access code(s). An unpaired connector still has
+    /// to go through the token flow; a paired one adds the printer with its own
+    /// credentials.
+    func confirmBambu() {
+        if isPaired {
+            confirmBambuAndAdd()
+        } else {
+            confirmBambuAndRegister()
+        }
+    }
+
     /// Submit the entered Bambu access codes, then register everything.
     func confirmBambuAndRegister() {
         state = .linking
@@ -363,6 +375,7 @@ final class FleetModel: ObservableObject {
                 self.printers = linked
                 self.token = ""
                 self.bambuDiscovered = []
+                self.isPaired = true // credentials now on disk — later adds skip the token
                 self.state = .justPaired
                 self.startStatusPolling()
                 // (Re)start the agent so the printers push telemetry → the web
@@ -470,16 +483,98 @@ final class FleetModel: ObservableObject {
                                  host: hit.host)
     }
 
-    /// Tapping "Pair" on a discovered printer routes into the REAL token flow —
-    /// pairing requires a code (the auth boundary), and `register` then discovers
-    /// and links every printer on the network. (No fake handshake; the actual
-    /// progress is shown by the token→register `.linking` step.) The tapped
-    /// printer is carried as context for the token screen.
+    /// Tapping "Pair"/"Add" on a discovered printer.
+    ///
+    /// If this connector isn't paired yet, that's the real auth boundary: route
+    /// into the token flow, where `register` exchanges a single-use code for
+    /// connector credentials and links everything on the network.
+    ///
+    /// If it *is* already paired, a pairing token adds nothing — the connector
+    /// can add a printer to itself with its own credentials (the same
+    /// authenticated endpoint the agent's re-discovery uses to adopt Moonraker
+    /// printers). Asking for a token here just sent people to the dashboard for
+    /// a code that changed nothing. So: Bambu asks for the one thing that can't
+    /// be discovered — its access code — and Moonraker, which needs no
+    /// credentials at all, is added straight away.
     func beginPairing(_ target: DiscoveredPrinter) {
         pairingTarget = target
         linkError = nil
         stopStatusPolling()
-        state = .tokenEntry
+
+        guard isPaired else {
+            state = .tokenEntry
+            return
+        }
+
+        switch target.kind {
+        case .bambu:
+            bambuDiscovered = [BambuDevice(host: target.host,
+                                           serial: Self.serial(fromDiscoveredID: target.id),
+                                           model: "",
+                                           name: target.name)]
+            state = .bambuCredentials
+        case .klipper, .printer:
+            addMoonrakerDirectly(target)
+        }
+    }
+
+    // Set when the app boots against an existing connector.json, or once a
+    // register call succeeds. Deliberately stored rather than read from disk on
+    // demand: routing decisions shouldn't depend on ambient filesystem state,
+    // which would make the same tap behave differently across machines (and
+    // make it untestable).
+    @Published var isPaired = false
+
+    /// Discovered Bambu ids are "bambu:<serial>" (see `discovered(fromBambu:)`).
+    static func serial(fromDiscoveredID id: String) -> String {
+        id.hasPrefix("bambu:") ? String(id.dropFirst("bambu:".count)) : ""
+    }
+
+    /// Moonraker needs no credentials, so there's nothing to prompt for.
+    private func addMoonrakerDirectly(_ target: DiscoveredPrinter) {
+        state = .linking
+        let port = Self.port(fromDiscoveredID: target.id)
+        AddPrinterService.addMoonraker(host: target.host, port: port, name: target.name) { [weak self] result in
+            self?.finishAdd(result)
+        }
+    }
+
+    /// Discovered Moonraker ids are "<host>:<port>".
+    static func port(fromDiscoveredID id: String) -> Int {
+        guard let raw = id.split(separator: ":").last, let p = Int(raw) else { return 7125 }
+        return p
+    }
+
+    /// Shared completion for the token-free add paths.
+    func finishAdd(_ result: Result<AddPrinterService.Payload, Error>) {
+        switch result {
+        case .success:
+            bambuDiscovered = []
+            pairingTarget = nil
+            // The rewritten config is picked up on restart, so the new printer
+            // starts pushing telemetry; status polling then surfaces it.
+            AgentService.restart()
+            state = .justPaired
+            startStatusPolling()
+        case .failure(let err):
+            linkError = err.localizedDescription
+            state = .scanning
+        }
+    }
+
+    /// Adds the Bambu printer whose access code the user just entered — no
+    /// pairing token, because this connector is already authenticated.
+    func confirmBambuAndAdd() {
+        guard let device = bambuDiscovered.first else { return }
+        guard !device.accessCode.trimmingCharacters(in: .whitespaces).isEmpty else {
+            linkError = "Enter the access code shown on the printer."
+            return
+        }
+        linkError = nil
+        state = .linking
+        AddPrinterService.addBambu(device) { [weak self] result in
+            self?.finishAdd(result)
+        }
     }
 
     /// Just-paired auto-returns to Attention Mode after ~6s (handoff §behavior).

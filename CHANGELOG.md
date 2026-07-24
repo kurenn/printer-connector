@@ -7,6 +7,36 @@ release workflow, which publishes the cross-compiled binaries and the macOS app.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-23
+
+### Added
+- **Add a printer without a pairing token.** New `connector add-printer`
+  subcommand registers printers with a connector that is *already paired*,
+  using its own credentials:
+
+  ```
+  connector add-printer --bambu host,serial,accesscode[,name]
+  connector add-printer --moonraker host[,port][,name]
+  ```
+
+  Pairing remains the auth boundary for a **new** connector. Adding a printer
+  to one that already holds credentials is a different act and never needed a
+  fresh grant — it's the same authenticated endpoint the agent's periodic
+  re-discovery has always used to adopt newly-found Moonraker printers.
+
+### Changed
+- **The menu-bar app no longer asks for a pairing token to add a printer to an
+  already-paired connector.** Tapping a discovered printer used to route to the
+  token screen regardless, so adding a Bambu meant a trip to the dashboard for
+  a single-use code that granted nothing new. Now:
+  - **Not paired** → the token flow, unchanged.
+  - **Paired + Bambu** → asks only for the access code (the one thing that
+    genuinely can't be discovered).
+  - **Paired + Moonraker** → added immediately; it needs no credentials.
+- The app's paired state is tracked in the model instead of being read from
+  disk on demand, so the same tap can't behave differently depending on ambient
+  filesystem state.
+
 ## [0.7.1] - 2026-07-23
 
 ### Fixed

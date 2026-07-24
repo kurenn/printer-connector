@@ -420,7 +420,7 @@ struct BambuCredentialsView: View {
             }
             .frame(maxHeight: 240)
 
-            AccentFillButton(title: "Link printers") { model.confirmBambuAndRegister() }
+            AccentFillButton(title: "Link printers") { model.confirmBambu() }
                 .padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 16)
                 .opacity(ready ? 1 : 0.5)
                 .disabled(!ready)
