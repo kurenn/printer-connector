@@ -142,3 +142,65 @@ extension FleetModelTests {
         XCTAssertEqual(d.name, "Bambu Lab printer")
     }
 }
+
+// MARK: - Token-free add for an already-paired connector
+//
+// A pairing token is the auth boundary for a NEW connector. Once paired, the
+// connector adds printers with its own credentials, so demanding a token just
+// sent people to the dashboard for a code that changed nothing.
+
+extension FleetModelTests {
+
+    /// Bambu rows are keyed "bambu:<serial>" so the access code can be attached
+    /// to the right printer without re-deriving it from the scan payload.
+    func testSerialIsRecoveredFromADiscoveredBambuID() {
+        XCTAssertEqual(FleetModel.serial(fromDiscoveredID: "bambu:0300CA612001784"),
+                       "0300CA612001784")
+    }
+
+    func testSerialIsEmptyForNonBambuIDs() {
+        XCTAssertEqual(FleetModel.serial(fromDiscoveredID: "192.168.68.70:7125"), "")
+    }
+
+    /// Moonraker rows are keyed "<host>:<port>" — the port must survive so a
+    /// printer on a non-default port is added correctly.
+    func testPortIsRecoveredFromADiscoveredMoonrakerID() {
+        XCTAssertEqual(FleetModel.port(fromDiscoveredID: "192.168.68.70:7130"), 7130)
+    }
+
+    /// A malformed or Bambu id falls back to Moonraker's default rather than
+    /// producing port 0.
+    func testPortFallsBackToTheDefault() {
+        XCTAssertEqual(FleetModel.port(fromDiscoveredID: "bambu:SERIAL"), 7125)
+        XCTAssertEqual(FleetModel.port(fromDiscoveredID: "garbage"), 7125)
+    }
+
+    /// An unpaired connector must still go through the token flow — that's the
+    /// real auth boundary and this change must not weaken it.
+    func testUnpairedConnectorStillRoutesToTheTokenFlow() {
+        let model = FleetModel()
+        model.isPaired = false
+        model.beginPairing(Self.bambuRow())
+        XCTAssertEqual(model.state, .tokenEntry,
+                       "an unpaired connector must still ask for a pairing token")
+    }
+
+    /// Once paired, tapping a Bambu asks for the one thing that can't be
+    /// discovered — the access code — instead of a pairing token that would
+    /// grant nothing new.
+    func testPairedConnectorAsksForTheAccessCodeNotAToken() {
+        let model = FleetModel()
+        model.isPaired = true
+        model.beginPairing(Self.bambuRow())
+        XCTAssertEqual(model.state, .bambuCredentials)
+        XCTAssertEqual(model.bambuDiscovered.count, 1)
+        XCTAssertEqual(model.bambuDiscovered.first?.serial, "SER",
+                       "the serial must carry over so the code attaches to the right printer")
+    }
+
+    private static func bambuRow() -> DiscoveredPrinter {
+        FleetModel.discovered(fromBambu: try! JSONDecoder().decode(
+            DiscoveryService.BambuHit.self,
+            from: Data(#"{"host":"10.0.0.5","serial":"SER","model":"","name":"B"}"#.utf8)))
+    }
+}

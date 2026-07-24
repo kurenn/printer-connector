@@ -20,6 +20,7 @@ import (
 	"printer-connector/internal/cloud"
 	"printer-connector/internal/config"
 	"printer-connector/internal/discovery"
+	"printer-connector/internal/provision"
 )
 
 // version is the single source of truth, overridden at build time via
@@ -299,6 +300,9 @@ func main() {
 		case "register":
 			runRegister()
 			return
+		case "add-printer":
+			runAddPrinter()
+			return
 		case "run-service":
 			// run-service --config <path>
 			// Called by the Windows Service Control Manager to start the agent as a
@@ -415,4 +419,99 @@ func main() {
 	}
 
 	logger.Info("agent exited cleanly")
+}
+
+// runAddPrinter adds printers to a connector that is ALREADY paired, using the
+// connector's own credentials — no pairing token.
+//
+//	connector add-printer --bambu host,serial,accesscode[,name] [--config P]
+//	connector add-printer --moonraker host[,port][,name]        [--config P]
+//
+// Pairing stays the auth boundary for a new connector; this is the separate act
+// of an authenticated connector adding a printer to itself, which the cloud has
+// always allowed (it is what the agent's re-discovery uses to adopt Moonraker
+// printers). Bambu printers needed a path here because their access code can't
+// be discovered, which previously forced users back to the dashboard for a
+// pairing token just to add a printer.
+func runAddPrinter() {
+	fs := flag.NewFlagSet("add-printer", flag.ExitOnError)
+	var bambu, moonraker bambuFlag // repeatable "a,b,c" specs
+	var cfgPath string
+	fs.Var(&bambu, "bambu", "Bambu printer 'host,serial,accesscode[,name]' (repeatable)")
+	fs.Var(&moonraker, "moonraker", "Moonraker printer 'host[,port][,name]' (repeatable)")
+	fs.StringVar(&cfgPath, "config", defaultConfigPath(), "Config path")
+	_ = fs.Parse(os.Args[2:])
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	emitErr := func(msg string) {
+		_ = enc.Encode(map[string]any{"error": msg})
+		os.Exit(1)
+	}
+
+	if len(bambu) == 0 && len(moonraker) == 0 {
+		emitErr("nothing to add — pass --bambu and/or --moonraker")
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil || cfg == nil || cfg.ConnectorID == "" || cfg.ConnectorSecret == "" {
+		emitErr("this connector is not paired yet — run `register --token <T>` first")
+	}
+
+	candidates := make([]config.Printer, 0, len(bambu)+len(moonraker))
+	for _, spec := range bambu {
+		p, err := provision.ParseBambu(spec)
+		if err != nil {
+			emitErr(err.Error())
+		}
+		candidates = append(candidates, p)
+	}
+	for _, spec := range moonraker {
+		p, err := provision.ParseMoonraker(spec)
+		if err != nil {
+			emitErr(err.Error())
+		}
+		candidates = append(candidates, p)
+	}
+
+	// Adding a printer the connector already manages is a no-op, not an error —
+	// the app can re-send a printer without special-casing it.
+	fresh := provision.Unregistered(cfg.Printers, candidates)
+	if len(fresh) == 0 {
+		_ = enc.Encode(map[string]any{
+			"added": []any{}, "count": 0, "note": "already managed by this connector",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+
+	client := cloud.New(cloud.Options{
+		BaseURL:   cfg.CloudURL,
+		Logger:    slog.Default(),
+		UserAgent: "spoolr-connect/" + version,
+	})
+	client.SetCredentials(cfg.ConnectorID, cfg.ConnectorSecret)
+
+	added, err := provision.Add(ctx, client, cfg.ConnectorID, fresh)
+	if err != nil {
+		emitErr("adding printers failed: " + err.Error())
+	}
+	if len(added) == 0 {
+		emitErr("the cloud did not accept any of these printers — they may already belong to another Spoolr workspace")
+	}
+
+	cfg.Printers = append(cfg.Printers, added...)
+	if err := config.SaveAtomic(cfgPath, cfg); err != nil {
+		emitErr("saving config failed: " + err.Error())
+	}
+
+	out := make([]map[string]any, 0, len(added))
+	for _, p := range added {
+		out = append(out, map[string]any{"id": p.PrinterID, "name": p.Name, "type": p.Type})
+	}
+	_ = enc.Encode(map[string]any{
+		"added": out, "count": len(out), "config_path": cfgPath,
+	})
 }
